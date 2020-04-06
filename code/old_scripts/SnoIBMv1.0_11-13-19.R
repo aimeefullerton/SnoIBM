@@ -1,0 +1,1152 @@
+#*******************************************************************************
+#
+# An individual-based model for evaluating 
+#   how phenology, growth and survival of juvenile salmonids may respond 
+#   to altered thermal [and flow] regimes [and to a second species]  
+#   in the Snoqualmie River watershed (WA, USA).
+#
+# Coded by:
+#    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
+#    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
+#    Last Updated 13 Nov 2019
+
+# Impassable barriers:
+#    Snoqualmie Falls = rid 488 (network rbm) or rid 53 (network nhd1)
+#    Tolt Reservoir dam = rid 179 (network rbm) or rid 308 (network nhd1)
+
+# Notes 
+  # @@@-WIP denotes work in progress
+  # \\ denotes lines used for testing
+
+# To Dos:
+  # check/update predation function
+  # calibrate/tune to match empirical data (see Empirical Metrics for targets to match)
+  # sensitivity analyses
+  # outmigration - try to represent fry migrant pulse?
+  # flow-ecology relationships for DHSVM-RBM version (see development notes log)
+  # optimize code for speed: movement is the limiting step
+  # consider implementing Beer et al. emergence model someday
+
+#*******************************************************************************
+
+#=== SETUP =====================================================================
+start.time = proc.time()
+
+# Libraries
+  library(SSN)
+  library(plyr)
+  library(rgdal)
+  library(raster)
+  library(RColorBrewer)
+
+# Load Functions
+  source("code/Functions4SnoIBM.R")
+
+# Global Variables
+  netnm = "sno" # used for plotting and some functions
+  network = "rbm" # nhd1""rbm"
+  cs = 2003 # climate scenario year (network ssn has data for 2014, 2015; rbm has 2006)
+  first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
+  last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
+  dat.idx = seq(from = first.date, to = last.date, by = 1) # list of all dates to model
+  day1= strptime(dat.idx[1], format="%Y-%m-%d")
+  spawn.date.variable = TRUE # variable spawn date? (set to F to have all fish spawn on first day)
+  interspecific.predation.flag = FALSE # allow predation by one species on the other?
+  interspecific.competition.flag = FALSE # allow species to compete with each other?
+  if(interspecific.competition.flag == FALSE & interspecific.predation.flag == FALSE) tag = "A" #Alone
+  if(interspecific.competition.flag == TRUE & interspecific.predation.flag == FALSE) tag = "C" #Competition
+  if(interspecific.competition.flag == FALSE & interspecific.predation.flag == TRUE) tag = "P" #Predation
+  if(interspecific.competition.flag == TRUE & interspecific.predation.flag == TRUE) tag = "B" #Both
+  ifelse(tag != "A", SecondSpecies<- TRUE, SecondSpecies<- FALSE)
+  survival.flag = T # allow fish to die? T turns on the survival functions, F causes mortality if fish weighs < survival.size
+  iter.list = 1 # list of simulation replicates (iterations) to run
+  iter = 1
+  plot.iter = 1 #which iteration will have maps plotted for each time step
+  run= fncGetRun()
+  show.progress = TRUE #send statements to the console showing progress
+  SA = FALSE #run sensitivity analysis
+
+# Network-specific Fields
+  if(network == "rbm"){
+    length.field = "Length"
+    so.field = "segorder"
+    width.field = "effwidth"
+  } else if(network == "nhd1"){
+    length.field = "LENGTHKM"
+    so.field = "SO"
+    #so.field = "STRM_ORDER"
+    width.field = "WIDTH_M"
+  }
+    wt.field = "WT"
+    q.field = "Q"
+    xlat = "NEAR_X"
+    ylon = "NEAR_Y"
+    lng2b.field = "lngth2B" #this is in fish shapefiles
+
+# Directories
+  mydir = getwd()
+  loadDir = "data.in"
+  if(network == "rbm") ssn.folder = "sno.rbm.ssn"
+  if(network == "nhd1") ssn.folder = "sno.ssn"
+  outputDir = paste0("data.out/", tag, ".", cs) 
+  # make directories, if they don't already exist
+  if (! dir.exists(file.path(paste0(mydir, "/", outputDir)))) {
+    dir.create(file.path(paste0(mydir, "/", outputDir)))
+  }
+
+# Plotting
+  # If plot.flag set to TRUE, first iteration will plot fish locations throughout time
+  plot.flag = TRUE
+  track.individuals = TRUE
+  if (plot.flag == TRUE) {
+    imageDir= paste0(outputDir, "/images")
+    
+    if (!dir.exists(file.path(imageDir))) {
+      dir.create(file.path(imageDir))
+    }
+    
+    # Color palette for plotting
+    grays = brewer.pal(9, "Greys")
+    grays = grays[c(9,8,7,6,5,4,3,2,1)]
+    
+    # water temperature
+    cb=  fncColBrewPlus(n = 14, paint = F)
+    left = c(0,2,4,6,8,10,12,14,16,18,20,22,24)
+    rght = c(2,4,6,8,10,12,14,16,18,20,22,24,27)
+    
+    #flow
+    cb2 = brewer.pal(9, "Blues")
+    left2 = seq(0, 500, length.out = 9)[1:8]
+    rght2 = seq(0, 500, length.out = 9)[2:9]
+    
+    # Read in basin outline or hillshade for plotting
+    outline = TRUE
+    if (outline) {
+      if(network == "rbm") basin = readOGR(paste0(mydir, "/", loadDir, "/shapefiles"), "Basin_snq2")
+      if(network == "nhd1") basin = readOGR(paste0(mydir,"/",loadDir,"/shapefiles"),"Basin_snq")
+      
+    } else {
+      hs = raster(paste0(mydir, "/", loadDir, "/shapefiles/snoq_hs")) 
+      # http://www.remotesensing.org/geotiff/proj_list/albers_equal_area_conic.html
+      units = km
+      projstr = CRS("+proj=aea +lat_1=47.66564 +lat_2=47.50781 +lat_0=23.0 +lon_0=-122.4525 +x_0=0 +y_0=0")
+      basin = projectRaster(hs, crs = projstr)
+    }
+   
+    streamlines = TRUE
+    if(streamlines){
+      streams<- readOGR(paste0(getwd(), "/", loadDir, "/", ssn.folder), "edges")
+      #\\ plot(streams, lwd = streams@data$meanmsq / 100000000)
+      #\\ plot(streams, col = streams@data$rid)
+    }
+    
+    # Set extent for plotting (will be updated later once ssn is loaded)
+    ex = extent(basin)
+  }
+
+# Load model parameters
+  parameters = read.csv(paste0(getwd(), "/", loadDir, "/parameters/model_parameters.csv"), stringsAsFactors = FALSE, header = TRUE, row.names = 1)[1:2,]
+  parameters[, "spawn.firstdate"] = gsub("x","",parameters[, "spawn.firstdate"])
+  parameters[, "smolt.date.cutoff"] = gsub("x","",parameters[, "smolt.date.cutoff"])
+  
+  # Species-specific constants used in Wisconsin bioenergetics model
+  salmon.constants = fncReadConstants(parameters[1, "spp"])
+  fish_other.constants = fncReadConstants(parameters[2, "spp"])
+
+# Load Attribute, Network, and Fish growth data
+  if(network == "rbm"){
+  # Load DHSVM-RBM flow and water temperature data for the climate scenario
+    Q.df = fncImportQ(paste0(loadDir, "/rbm.data/Outflow.Only.csv")) #flow 2001-2013
+    Q.df = Q.df[Q.df$Date >= as.Date(paste0(cs-1,"-09-01")) & Q.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
+    WT.df = fncImportWT(paste0(loadDir, "/rbm.data/Tw_output.csv")) #temperature 2001-2013
+    WT.df = WT.df[WT.df$Date >= as.Date(paste0(cs-1,"-09-01")) & WT.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
+
+  } else if(network == "nhd1"){
+    # Load pre-calculated SSN water temperature (flow) data for the climate scenario
+    Q.df = NULL
+    WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", cs, ".csv"), header = TRUE, stringsAsFactors = FALSE)
+  }
+    
+# Load copy of SSN (will be kept as loaded backup)
+  sno.ssn = importSSN(paste0(loadDir, "/", ssn.folder) , predpts='preds')
+  if(network == "nhd1"){
+    # There are 15 points where ratio is >1; checked in GIS, this changes them to 1:
+    sno.ssn@predpoints@SSNPoints[[1]]@point.data$ratio[sno.ssn@predpoints@SSNPoints[[1]]@point.data$ratio > 1] = 1
+    # Reaches with no prediction points
+    missed = c(0, which(!1:nrow(sno.ssn@data)%in%sort(unique(sno.ssn@predpoints@SSNPoints[[1]]@point.data$rid))))
+  }
+  if(network == "rbm"){
+    # Reaches with no prediction points
+    arcID = as.numeric(gsub("X", "", colnames(WT.df)[3:ncol(WT.df)]))
+    missed = setdiff(sno.ssn@data$rid, arcID) 
+  }
+  # Create vector of all reaches
+  allsegs = sno.ssn@data$rid
+  
+# Load topology lists for the network (previously created)
+  # all segments downstream from a given seg
+  load(paste0(mydir, "/", loadDir, "/", ssn.folder, "/dnsegs.RData"))
+  # all segments upstream from a given seg
+  load(paste0(mydir, "/", loadDir, "/", ssn.folder, "/upsegs.RData"))
+  # all segments at the upper end/confluence of a given seg
+  load(paste0(mydir, "/", loadDir, "/", ssn.folder, "/jct.list.RData"))
+
+# Load pre-calculated growth for each temperature/ration/size combination 
+  # that can be looked up instead of having to run the bioenergetics model on the fly each time
+  # dims = no. of WT (500; 0 to 25 C), ration (151; 0.01 to 0.3), weight (500, 1 to 500 g)
+  load(paste0(mydir, "/", loadDir, "/fish.growth.lookup/wt.growth.array.", parameters[1,"species"], ".RData"))
+  assign("wt.growth.salmon", wt.growth)
+  if(SecondSpecies == TRUE){
+    load(paste0(mydir, "/", loadDir, "/fish.growth.lookup/wt.growth.array.", parameters[2,"species"], ".RData"))
+    assign("wt.growth.fish_other", wt.growth)
+  }
+  rm(wt.growth)
+
+  
+# Set up arrays that will store data
+  # List of tracked fields to store permanently
+  array.cols2keep = c("pid", "seg", "xloc", "yloc", "upDist", "SO", "WT", "Q", "TU","emrg", "survive", 
+                      "conspecificdensity", "otherdensity", "totaldensity", "direction", "movedist", 
+                      "pvals", "consInst", "consCum", "growth", "weight", "ration")
+  output.cols2keep = c("pid", "TU","emrg", "survive", "consCum", "weight", "dateSp", "dateEm", "dateOm", "datePr", "dateDi")
+  
+  # Salmon arrays
+  nFish = parameters["salmon","nFish"]
+  # no. of fish, no. variables, no. time steps, no. iterations
+  salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
+  # no. of fish, no. variables, no. iterations; final values so no time component
+  salmon.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
+  
+  # fish_other arrays
+  if(SecondSpecies == TRUE){
+  nFish = parameters["fish_other", "nFish"]
+  # no. of fish, no. variables, no. time steps, no. iterations
+  fish_other.array= array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
+  # no. of fish, no. variables, no. iterations; final values so no time component
+  fish_other.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
+  }
+  
+#=== ITERATE (if running more than one replicate) ==============================
+
+# Start looping through iterations
+for(iter in iter.list){
+  start.time = proc.time()
+  (scenario = paste0(cs, ".", iter))
+  
+  # Seed for reproducible results, change for each iteration
+  set.seed(iter)
+  # if running sensitivity analyses:
+  if(SA == TRUE) {parameters = fncGetParametersSA()}
+  
+#=== INITIALIZE HABITAT ========================================================
+
+  # Load the Snoqualmie Spatial Stream Network (SSN)
+  ssn = sno.ssn
+  if(network == "rbm"){
+    ssn@data[,width.field] = ssn@data[,width.field] * 100 #get into meters
+    ssn@data[,length.field] = ssn@data[,length.field] / 1000 #get into kilometers
+    ssn@data[,"upDist"] = ssn@data[,"upDist"] / 1000 #get into kilometers
+  }
+  
+  if(plot.flag == TRUE){ #set plotting extent based on SSN bounding box
+    ex@xmin = ssn@bbox[1]
+    ex@xmax = ssn@bbox[3]
+    ex@ymin = ssn@bbox[2]
+    ex@ymax = ssn@bbox[4]
+  }
+  
+  # Get reach widths, adjusted to represent the proportion useable by fish, which decreases as width increases
+  useable.widths = fncUseableWidths(dat = ssn@data[,c("rid", width.field)])
+  ssn@data$UseableWidth = useable.widths[useable.widths[,1] == ssn@data$rid,3]
+  
+  # Extract dataset (DHSVM-RBM and virtual networks have one value per stream segment; NHD networks have variable numbers)
+  wq.df = getSSNdata.frame(ssn, "preds")
+  # change factor fields to numeric, if necessary
+  if(is.factor(wq.df$rid)) wq.df$rid = as.numeric(levels(wq.df$rid)[as.numeric(wq.df$rid)])
+
+  # Get lists of network-specific segments above and below Snoqualmie Falls (a natural anadromous barrier) and Tolt Reservoir dam
+  if(network == "rbm"){
+    segsAbvFalls = upsegs[[488]]
+    segsAbvRes = upsegs[[179]]
+  }
+  if(network == "nhd1"){
+    segsAbvFalls= upsegs[[53]]
+    segsAbvRes = upsegs[[308]]
+  }
+  segsBlwFalls = unique(ssn@data$rid)[! unique(ssn@data$rid) %in% segsAbvFalls]
+  segsBlwRes = unique(segsBlwFalls)[! unique(segsBlwFalls) %in% segsAbvRes]
+  segsAccessible = intersect(segsBlwFalls, segsBlwRes)
+  
+  # Add column to denote which reaches are accessible to fish (for blocking movement)
+  ssn@data$accessible = 0
+  ssn@data$accessible[ssn@data$rid %in% segsAccessible] = 1 
+  ssn@data$Chinook_rg[is.na(ssn@data$Chinook_rg)] = 0
+  ssn@data$Chinook_sp[is.na(ssn@data$Chinook_sp)] = 0
+  if(SecondSpecies == TRUE){
+    ssn@data$LMB_range[is.na(ssn@data$LMB_range)] = 0
+    ssn@data$LMB_sp[is.na(ssn@data$LMB_sp)] = 0
+  }
+  
+  # Calculate ration (g/g/d) available to fish; More productive food webs in lower mainstem habitats
+  #linearly relate to log(stream order) and position within reach
+  ration_1 = fncRescale(log(wq.df[,so.field] + (1 - wq.df$ratio)), c(parameters[1,"ration.lo"], parameters[1,"ration.hi"]))
+  #inverse-linearly relate to distance from the mouth (upDist)
+  ration_2 = fncRescale(wq.df$upDist, c(parameters[1,"ration.hi"], parameters[1,"ration.lo"])) 
+  wq.df$ration = ssn@predpoints@SSNPoints[[1]]@point.data$ration = (ration_1 + ration_2) / 2
+  #\\ plot(ssn, "ration", breaktype = "even", nclasses = 6)
+
+  # Add ration field for second species (may not be used)
+  wq.df$ration_ss = ssn@predpoints@SSNPoints[[1]]@point.data$ration_ss = wq.df$ration
+  
+  # Save this 'base case' ration because we will be updating ration later
+  wq.df$ration_base = ssn@predpoints@SSNPoints[[1]]@point.data$ration_base = wq.df$ration 
+  
+  # Initialize fish density
+  wq.df$density = ssn@predpoints@SSNPoints[[1]]@point.data$density = 0
+  
+  # Reduce field set
+  if(network == "nhd1")   wq.df = wq.df[, c("pid", "rid", so.field, xlat, ylon, "ratio", "upDist", "afvFlow", 
+                          "locID", "netID", width.field, "ration", "ration_ss", "ration_base", "density")]
+  if(network == "rbm") wq.df = wq.df[, c("arcid","pid", "rid", so.field, xlat, ylon, "ratio", "upDist", 
+                       "afvArea", "locID", "netID", width.field, "ration", "ration_ss","ration_base", "density")]
+  
+  nwq = nrow(wq.df)
+  
+  # Put wq.df back into ssn
+  ssn = putSSNdata.frame(wq.df, ssn, "preds")
+
+  #ssn@obspoints@SSNPoints[[1]]@point.data$ration = ssn@predpoints@SSNPoints[[1]]@point.data$ration
+  #plot(ssn,"ration",breaktype="even",nclasses=6)
+  
+#=== INITIALIZE FISH ===========================================================
+
+  # 1. Import the fish locations into the SSN
+  
+  # Salmon
+  #fncFishShp("chinook") #subsets original shapefile to nFish using seed=iter (un-comment to re-run if needed)
+  fish.shp = parameters["salmon", "fish.shp"] # get name of shapefile to load
+  ssn = importPredpts(ssn, fish.shp, "ssn") # load into SSN
+  salmon.id = 2 # this is the 2nd 'preds' file loaded in the SSN
+  ssn@predpoints@ID[salmon.id] = parameters[1,"species"] # name it
+  #\\ plot(streams, col = "darkgray") # plot streams
+  #\\ points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1], ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2], col = 1, pch = 1, cex = 0.5) # add fish locations to plot
+  #\\ test_rids=c(167,185,206,236,279,372,432,450,517,574)
+  #\\ points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$rid%in%test_rids],ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$rid%in%test_rids],col=2, pch=1, cex=0.5)
+
+  # Update fish data files with some basic tracking info and fields that will hold scenario data
+  # rename fish ID sequentially (critical for tracking movement later)
+  ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid = 
+    rownames(ssn@predpoints@SSNPoints[[salmon.id]]@point.data) = 1:nrow(ssn@predpoints@SSNPoints[[salmon.id]]@point.data) 
+  
+  # create 'seg' field and set equal to 'rid' field
+  ssn@predpoints@SSNPoints[[salmon.id]]@point.data$seg = ssn@predpoints@SSNPoints[[salmon.id]]@point.data$rid
+  
+  # create 'wt.field' and 'q.field'
+  ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,wt.field] = 0 # water temperature field
+  ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,q.field] = 0 # flow (discharge) field
+  
+  if(network == "rbm"){
+    #get into kilometers:
+    ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,"upDist"] = ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,"upDist"] / 1000 
+    ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,"lngth2B"] = ssn@predpoints@SSNPoints[[salmon.id]]@point.data[,"lngth2B"] / 1000 
+  }
+
+
+  # Other fish
+  if(SecondSpecies == TRUE){
+  #fncFishShp("lmb") #subsets original shapefile to nFish using seed=iter (un-comment to re-run if needed)
+  fish.shp = parameters["fish_other", "fish.shp"] # get name of shapefile to load
+  ssn = importPredpts(ssn, fish.shp, "ssn") # load into SSN
+  fish_other.id = 3 # this is the 3rd 'preds' file loaded in the SSN
+  ssn@predpoints@ID[fish_other.id] = parameters[2,"species"] # name it
+  #points(ssn@predpoints@SSNPoints[[fish_other.id]]@point.coords[,1], ssn@predpoints@SSNPoints[[fish_other.id]]@point.coords[,2], col = 2, pch = 1, cex = 0.5) # add fish locations to plot
+ 
+  rm(fish.shp)
+  
+  # Update fish data files with some basic tracking info and fields that will hold scenario data
+  # rename fish ID sequentially (critical for tracking movement later)
+  ssn@predpoints@SSNPoints[[fish_other.id]]@point.data$pid = 
+    rownames(ssn@predpoints@SSNPoints[[fish_other.id]]@point.data) = 1:nrow(ssn@predpoints@SSNPoints[[fish_other.id]]@point.data) 
+  
+  # create 'seg' field and set equal to 'rid' field
+  ssn@predpoints@SSNPoints[[fish_other.id]]@point.data$seg = ssn@predpoints@SSNPoints[[fish_other.id]]@point.data$rid
+  
+  # create 'wt.field' and 'q.field'
+  ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,wt.field] = 0 # water temperature field
+  ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,q.field] = 0 # flow field
+  
+  if(network == "rbm"){
+    #get into kilometers:
+    ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,"upDist"] = ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,"upDist"] / 1000 
+    ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,"lngth2B"] = ssn@predpoints@SSNPoints[[fish_other.id]]@point.data[,"lngth2B"] / 1000 
+  }
+  }
+  
+  # 2. Create fish data frame for manipulating during simulation
+  # pid: unique identification for each fish
+  # seg: which network segment the fish is in (same as rid)
+  # ratio: relative distance along the segment (from bottom to top [0-1])
+  # xloc: x coordinate of fish
+  # yloc: y coordinate of fish
+  # length2segBase is the length from a fish's position in the current segment to its base
+  # upDist is the distance from a fish's position to the base of the whole network
+  # emrg values: 0 = egg placed (initial value), -1 = egg spawned, 1 = egg emerged
+  # survive values: 1 = alive (initial value), 0 = dead, 2 = outmigrated/smolted, -1 = eaten by predator
+  
+  # Get data frame from SSN
+  salmon.df = getSSNdata.frame(ssn, "chinook")[c(xlat, ylon, "pid", "rid", "ratio", "upDist", lng2b.field, wt.field, q.field)]
+
+  # Create new dataframe
+  salmon = data.frame(pid = 1:nrow(salmon.df), seg = 0, xloc = 0, yloc = 0, ratio = 0, length2segBase = 0, upDist = 0, 
+          SO = 0, WT = 0, Q = 0, TU = 0, emrg = 0, survive = 1, conspecificdensity = parameters["salmon", "initial.mass"], 
+          otherdensity = 0, totaldensity = 0, direction = 0, movedist = 0, pvals = 0, ration = 0, consInst = 0, consCum = 0,  
+          growth = 0, weight = parameters["salmon", "initial.mass"], dateSp = day1, dateEm = day1, dateOm = day1, 
+          datePr = day1, dateDi = day1, stringsAsFactors = FALSE)
+
+  # Fill in what we can from the ssn
+  salmon$seg = salmon.df$rid
+  salmon$ratio = salmon.df$ratio
+  salmon$xloc = salmon.df[,xlat]
+  salmon$yloc= salmon.df[,ylon]
+  salmon$length2segBase = salmon.df[,lng2b.field]
+  salmon$upDist = salmon.df$upDist
+  rm(salmon.df)
+  
+  if(SecondSpecies == TRUE){
+  fish_other.df = getSSNdata.frame(ssn, "lmb")[c(xlat, ylon, "pid", "rid", "ratio", "upDist", lng2b.field, wt.field, q.field)]
+  fish_other = data.frame(pid = 1:nrow(fish_other.df), seg = 0, xloc = 0, yloc = 0, ratio = 0, length2segBase = 0, upDist = 0, 
+          SO = 0, WT = 0, Q = 0, TU = 0, emrg = 0, survive = 1, conspecificdensity = parameters["fish_other", "initial.mass"], 
+          otherdensity = 0, totaldensity = 0, direction = 0, movedist = 0, pvals = 0, ration = 0, consInst = 0, consCum = 0,  
+          growth = 0, weight = 0, dateSp = day1, dateEm = day1, dateOm = day1, datePr = day1, dateDi = day1,
+          stringsAsFactors = FALSE)
+  fish_other$seg = fish_other.df$rid
+  fish_other$ratio = fish_other.df$ratio
+  fish_other$xloc = fish_other.df[,xlat]
+  fish_other$yloc= fish_other.df[,ylon]
+  fish_other$length2segBase = fish_other.df[,lng2b.field]
+  fish_other$upDist = fish_other.df$upDist
+  fish_other$weight = sample(x = seq(1:4000), size = parameters["fish_other","nFish"], 
+            prob = sort(fncRescale(rlnorm(4000,1,parameters["fish_other", "mass.sdlog"])), decreasing = TRUE))
+  rm(fish_other.df)
+  }
+  
+  # 3. Spawning window and distribution over time
+  # salmon spawn over approximately "nSpawnDays" days, peaks in the middle
+  # gives between ~41 and 60 days of spawning; empirical mean is 51, range is 31-71 from WDFW spawner surveys 2005-2015)
+  # here, multiplied nSpawnDays x 2 because there are two time steps per day
+  salmon.spawn.times = hist(rnorm(nrow(salmon), mean = 0, sd = parameters["salmon","spawn.date.sd"]), breaks = (parameters["salmon", "nSpawnDays"] * 2), plot = FALSE)$counts
+  #\\sum(salmon.spawn.times); length(salmon.spawn.times); plot(salmon.spawn.times)
+  
+    
+#=== RUN SIMULATION ============================================================
+
+  # Make temporary array to hold fish data for this time step (numFish x tt)
+  salmon.array.temporary = array(NA, dim = dim(salmon.array)[1:3])
+  if(SecondSpecies == TRUE) fish_other.array.temporary = array(NA, dim = dim(fish_other.array)[1:3])
+  
+  # Loop over each day (dd) and time step (tt) in an iteration (iter)
+  ii= 1
+  day = 1 # initialize day counter for spawning
+  for(dd in 1:length(dat.idx)){
+    for(tt in c(6, 18)){ #6am, 6pm
+      thetitle = fncGetTitle(dat.idx[dd], tt)
+      cat(iter, ": ", thetitle, "runtime: ", proc.time(), "\n")
+      if(show.progress == TRUE){
+        cat(length(salmon$emrg[salmon$emrg == -1]), " eggs incubating", "\n")
+        cat(length(salmon$weight[salmon$survive == 2]), " subyearlings: ", quantile(salmon$weight[salmon$survive == 2]), "\n")
+        cat(length(salmon$weight[salmon$survive == 1]), " yearlings: ", quantile(salmon$weight[salmon$survive == 1]), "\n")
+        cat("proportion yearlings: ", length(salmon$weight[salmon$survive == 1]) / (length(salmon$weight[salmon$survive == 2]) + length(salmon$weight[salmon$survive == 1])), "\n")
+        cat("fry-to-smolt survival: ", length(salmon$weight[salmon$survive > 0]) / parameters[1,"nFish"], "\n")
+        if(SecondSpecies == TRUE) cat(length(fish_other$weight[fish_other$survive == 1]), " fish_other: ", 
+                                      quantile(fish_other$weight[fish_other$survive == 1]), "\n")
+      }
+      
+  # 1. UPDATE HABITAT: Get predicted stream temperatures and flow
+      
+      # Load flow and temperature for this date and time
+      if("Q" %in% colnames(ssn@predpoints@SSNPoints[[1]]@point.data)){
+        ssn = fncUnloadWQ("Q",ssn) # unload if it's already loaded
+      }
+      if(network == "rbm") ssn = fncLoadWQdata(type = "Q", dat.df = Q.df, thedate = dat.idx[dd], thetime = tt, ssn = ssn, plotit = FALSE)
+      if(network == "nhd1") ssn@predpoints@SSNPoints[[1]]@point.data$Q = 0
+      
+      if("WT" %in% colnames(ssn@predpoints@SSNPoints[[1]]@point.data)){
+        ssn = fncUnloadWQ("WT",ssn) # unload if it's already loaded
+      }
+      ssn = fncLoadWQdata(type = "WT", dat.df = WT.df, thedate = dat.idx[dd], thetime = tt, ssn = ssn, plotit = FALSE)
+      
+      # Extract data frame that has had flow and temperautre loaded
+      wq.df = getSSNdata.frame(ssn,"preds")
+      
+      # changing factor/character fields to numeric, if necessary
+      for(field in c("rid", so.field, wt.field, q.field)){
+        if (is.factor(wq.df[,field])) {
+          wq.df[,field] = as.numeric(levels(wq.df[,field])[as.numeric(wq.df[,field])])
+        }
+        if (is.character(wq.df[,field])) {
+          wq.df[,field] = as.numeric(wq.df[,field])
+        }
+      }
+      
+      # Plot updated water temperature/flow and fish locations
+      # (only for this iteration due to storage constraints)
+      if(plot.flag == TRUE & iter == plot.iter){
+        
+        png(paste0(mydir, "/", imageDir, "/", dat.idx[dd], "-", sprintf("%03d", tt), ".png"), width = 9, height = 6, units = "in", res = 150)
+        par(mar = c(1, 0, 4, 0))
+  
+        # plot background
+        if (outline) {
+          plot(basin,col="gray80",border=NA)
+        } else {
+          plot(basin,col=grays,ext=ex,axes=FALSE, xlab = "", ylab = "", box = FALSE, legend = FALSE)
+        }
+        
+        plot(streams, col="darkgray", add = TRUE)
+
+        #plot water temperature/flow for dd & tt as colored stream lines:
+        if(network == "rbm"){
+          #ssn@data$Q = ssn@predpoints@SSNPoints[[1]]@point.data$Q[ssn@data$rid == ssn@predpoints@SSNPoints[[1]]@point.data$rid]
+          ssn@data$WT = ssn@predpoints@SSNPoints[[1]]@point.data$WT[ssn@data$rid == ssn@predpoints@SSNPoints[[1]]@point.data$rid]
+          #for(n in 1:length(cb2)) {ssn@data$Q.color[ssn@data$Q >= left2[n] & ssn@data$Q <= rght2[n]]= n}
+          for(n in 1:length(cb)) {ssn@data$WT.color[ssn@data$WT >= left[n] & ssn@data$WT <= rght[n]]= n}
+          
+          for (i in 1:length(ssn@lines)) {
+            for (j in 1:length(ssn@lines[[i]])) {
+              lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb[ssn@data[i,"WT.color"]], lwd = 10 * (ssn@data[i, "afvArea"] + 0.1))
+            }
+          }
+        }
+        if(network == "nhd1"){
+          datap = wq.df[,c("rid", wt.field)]
+          datap2 = tapply(datap[,wt.field], datap$rid, mean, na.rm = TRUE)
+          datap3 = cbind.data.frame("rid" = as.numeric(names(datap2)), "WT" = datap2)
+          
+          linedata = ssn@data
+          rownames(linedata) = NULL
+          linedata$sort.order = as.integer(rownames(linedata))
+          if("WT" %in% colnames(linedata)) linedata = linedata[,-which(colnames(linedata) == "WT")] #remove WT field
+          linedata2 = merge(linedata, datap3, by = "rid", all.x = TRUE) 
+          linedata2 = linedata2[order(linedata2$sort.order),]
+          for(n in 1:length(cb)) {
+            linedata2$col.class[linedata2[,wt.field] >= left[n] & linedata2[,wt.field] <= rght[n]] = n
+          }
+          ssn@data = linedata2
+          for (i in 1:length(ssn@lines)) {
+            for (j in 1:length(ssn@lines[[i]])) {
+              lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb[ssn@data[i,"col.class"]], lwd = 5*(ssn@data[i,"afvFlow"] + 0.4))
+            }
+          }
+        }
+        
+        # Plot fish locations for dd & tt
+        open.salmon = salmon$pid[salmon$emrg == 0 & salmon$survive == 1]
+        spawned.salmon = salmon$pid[salmon$emrg == -1 & salmon$survive == 1]
+        emerged.salmon = salmon$pid[salmon$emrg == 1 & salmon$survive == 1]
+        
+        if(SecondSpecies == TRUE){
+          alive.fish_other = fish_other$pid[fish_other$survive == 1]
+          points(ssn@predpoints@SSNPoints[[fish_other.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[fish_other.id]]@point.data$pid %in% alive.fish_other],
+                 ssn@predpoints@SSNPoints[[fish_other.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[fish_other.id]]@point.data$pid %in% alive.fish_other],
+                 col = "gray50", pch = 15, cex = 0.5)
+        }
+        
+        # salmon spawning sites
+        points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% open.salmon],
+              ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% open.salmon],
+              col = 1, pch = 1, cex =0.5)
+        
+        # incubating salmon eggs
+        points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% spawned.salmon],
+              ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% spawned.salmon],
+              col = 2, pch = 20, cex = 0.8)
+        
+        # emerged salmon
+        points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% emerged.salmon],
+              ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid %in% emerged.salmon],
+              col = 4, pch = 20, cex = 0.8)
+        
+        # all points: points(ssn@predpoints@SSNPoints[[id]]@point.coords[,1],ssn@predpoints@SSNPoints[[id]]@point.coords[,2],col=1,pch=20,cex=0.8)
+    
+        # track a few individuals:
+        if(track.individuals == TRUE){
+          fish.to.track = 1:5 #sample(salmon$pid, 5)
+          i = 10
+          for(f in fish.to.track){
+            points(ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,1][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid == f],
+                   ssn@predpoints@SSNPoints[[salmon.id]]@point.coords[,2][ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid == f],
+                   col = i, pch = 20, cex = 0.8)
+            i= i + 1
+          }
+          rm(i)
+        }
+        
+        # Add legend
+        leglabs = paste(left, "to", rght)
+        legend("right", legend = leglabs, title=expression("Temperature "~degree(C)),bty = "n", pch = 19, col = cb, cex = 0.8)
+        
+        # Add scale bar
+        rect(xleft = ex[1] + 5000, ybottom = ex[3] + 3000, xright = ex[1] + 7500, ytop = ex[3] + 3500)
+        rect(xleft = ex[1] + 7500, ybottom = ex[3] + 3000, xright = ex[1] + 10000, ytop= ex[3] + 3500, col = 1)
+        rect(xleft = ex[1] + 10000, ybottom = ex[3] + 3000, xright = ex[1] + 12500, ytop = ex[3] + 3500)
+        rect(xleft = ex[1] + 12500, ybottom = ex[3] + 3000, xright = ex[1] + 15000, ytop = ex[3] + 3500, col = 1)
+        segments(x0 = ex[1] + 5000, y0 = ex[3] + 3000, x1 = ex[1] + 5000, y1 = ex[3] + 2500)
+        segments(x0 = ex[1] + 10000, y0=ex[3] + 3000, x1 = ex[1] + 10000, y1 = ex[3] + 2500)
+        segments(x0 = ex[1] + 15000, y0 = ex[3] + 3000, x1 = ex[1] + 15000, y1 = ex[3] + 2500)
+        text(x = ex[1] + 5000, y = ex[3] + 1500, "0", cex = 0.8)
+        text(x = ex[1] + 10000, y = ex[3] + 1500, "5", cex = 0.8)
+        text(x = ex[1] + 15000, y = ex[3] + 1500, "10", cex = 0.8)
+        text(x = ex[1] + 18000, y = ex[3] + 1500, "km", cex = 0.8) 
+        
+        # Add north arrow
+        arrows(ex[1] + 2000, ex[3] + 2300, ex[1] + 2000, ex[3] + 4000, length = 0.1, lwd = 5)
+        text(ex[1] + 2000, ex[3] + 1000, "N")
+        
+        # Add title
+        mtext(thetitle, side = 3, line=2, cex = 1.3)
+    
+        dev.off()
+      } # end plotting for the selected iter
+
+      
+  # 2. SPAWN salmon
+      
+      # If any potential redd locations do not yet have a spawned fish,...
+      if (any(salmon$emrg == 0)){
+        spawn.firstdate = parameters["salmon", "spawn.firstdate"]
+        spawn.init = as.Date(paste0(cs - 1, "-", spawn.firstdate))
+        # and if the date is at or past the beginning of the spawning window,...
+        if(dat.idx[dd] >= spawn.init){
+          # and if spawning will be modeled as variable dates, not fixed,...
+          if(spawn.date.variable == TRUE){
+            # and if the date is not past the end of the variable spawning window,...
+            if(day <= length(salmon.spawn.times)){
+            # then get an index of which locations to spawn, from species.spawn.times[day]
+              # and limited to only what's left unspawned
+            spawn.index = sample(salmon$pid[salmon$emrg == 0], min(length(salmon$pid[salmon$emrg == 0]), salmon.spawn.times[day]))
+            # mark these locations as spawned (-1)
+            salmon$emrg[salmon$pid %in% spawn.index] = -1
+            # and record the date that spawning took place for this fish
+            salmon$dateSp[salmon$dateSp == day1 & salmon$emrg == -1] = strptime(dat.idx[dd], format = "%Y-%m-%d")
+            }
+            #move the day counter forward through the spawning window:
+            day = day + 1 
+          } else{ 
+            # if spawning date is fixed, spawn all fish on the initial spawn date (spawn.init date):
+            salmon$emrg = -1
+            salmon$dateSp = strptime(dat.idx[dd], format = "%Y-%m-%d")
+          } #end variable spawning condition
+        } #end spawn window condition
+      } #end checking for unspawned locations
+
+      
+  # 3. INCUBATE salmon & accumulate thermal exposure
+      
+      # Assign closest water temperature to salmon
+      salmon$WT[salmon$survive == 1 & salmon$seg > 0] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", wt.field)], salmon[salmon$survive == 1 & salmon$seg > 0, c("pid", "seg", "ratio")], ssn)[,wt.field]
+      
+      # Accumulate thermal units (TUs) While salmon are spawned or emerged
+      salmon$TU[salmon$survive == 1 & salmon$emrg != 0] = salmon$TU[salmon$survive == 1  & salmon$emrg != 0] + salmon$WT[salmon$survive == 1  & salmon$emrg != 0] * 0.5 #halved to account for half-day time step
+      
+      # Assign closest flow to salmon
+      if(network == "rbm") salmon$Q[salmon$survive == 1 & salmon$seg > 0] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", q.field)], salmon[salmon$survive == 1 & salmon$seg > 0,c("pid", "seg", "ratio")], ssn)[,q.field]
+      
+      if(SecondSpecies == TRUE){
+      fish_other$WT[fish_other$survive == 1 & fish_other$seg > 0] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", wt.field)], fish_other[fish_other$survive == 1 & fish_other$seg > 0, c("pid", "seg", "ratio")], ssn)[,wt.field]
+      fish_other$TU[fish_other$survive == 1] = fish_other$TU[fish_other$survive == 1] + fish_other$WT[fish_other$survive == 1] * 0.5 #halved to account for half-day time step
+      fish_other$Q[fish_other$survive == 1 & fish_other$seg > 0] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", q.field)], fish_other[fish_other$survive == 1 & fish_other$seg > 0,c("pid", "seg", "ratio")], ssn)[,q.field]
+      }
+        
+    
+  # 4. EMERGE salmon
+      # Alevins emerge after reaching an accumulated thermal unit (TU) threshold
+      if (any(salmon$emrg == -1)) {
+        salmon$emrg[salmon$emrg == -1 & salmon$TU >= parameters["salmon", "ATU.crit"]] = 1
+        salmon$dateEm[salmon$dateEm == day1 & salmon$emrg == 1] = strptime(dat.idx[dd], format="%Y-%m-%d")
+      }
+      
+      
+  # 5. MOVE FISH
+      # After emergence, assess probability of movement and move fish if appropriate
+
+      # 5a. Move salmon individually
+
+      # index for which salmon have emerged and can grow, and are still alive
+      salmon.alive.emerge.index = salmon$pid[salmon$emrg == 1 & salmon$survive == 1]
+      
+      if(length(salmon.alive.emerge.index) > 0){
+        
+        # Set which growth lookup table to use
+        sp.idx = 1
+        wt.growth = wt.growth.salmon
+        fish = salmon[salmon.alive.emerge.index,]
+        
+        # Bias movement direction downstream as fish grows larger (100% downstream drive if larger than smolt.mass)
+        # but after smolt.date.cutoff, fish loses the outmigration drive and becomes a yearling
+          smolt.date.cutoff = as.Date(paste0(cs, "-", parameters[1,"smolt.date.cutoff"]))
+          smolt.mass = parameters[1, "smolt.mass"]
+          if(dat.idx[dd] > smolt.date.cutoff){
+            om.prob = (fish$weight / smolt.mass) * (1 - as.numeric(dat.idx[dd] - smolt.date.cutoff) / as.numeric(dat.idx[length(dat.idx)] - smolt.date.cutoff))
+          } else{
+            om.prob = fish$weight / smolt.mass
+          }
+          # constrain between 0.5 (equal chance of moving up or down) and 1 (maximum downstream drive)
+          om.prob[om.prob > 1] = 1; om.prob[om.prob < 0.5] = 0.5
+          # assign fish initial direction based on outmigration probability
+          fish$direction = rbinom(n = length(om.prob), size = 1, prob = om.prob)
+
+        # Run movement decision functions
+          #1. Get movement distance for fish that can move during this time step
+          moveDist = fncMoveDistance(fish, sp.idx, ssn)
+          
+          #2. Move fish individually (one fish, one time step)
+          moved = lapply(fish[,"pid"], function(x) fncMoveIndividual(fpid = x, fish, sp.idx, ssn))
+          fish = do.call(rbind, moved)
+          
+          #3. Update x and y coordinates
+          # if this was a generated network, use straight-line distance calcs
+          # if this network was created in GIS, use different approach for moving along a potentially curvy reach
+          ifelse(length(grep("network-", netnm)) > 0, 
+                 locs<- ddply(fish, .(pid), function(x) data.frame(fncGetXY(x$seg, x$ratio, ssn))), 
+                 locs<- ddply(fish, .(pid), function(x) data.frame(fncGetXY.arc(x$seg, x$ratio, ssn))))
+          fish$xloc<- locs$xloc
+          fish$yloc<- locs$yloc
+          
+          #4. Update data in SSN
+          # data table
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$upDist[salmon.alive.emerge.index] = fish$upDist
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$ratio[salmon.alive.emerge.index] = fish$ratio
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data[,xlat][salmon.alive.emerge.index] = fish$xloc
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data[,ylon][salmon.alive.emerge.index] = fish$yloc
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$rid[salmon.alive.emerge.index] = fish$seg
+          # note: sp.idx + 1 because 'preds' is in the 1st position, so the first fish is in the second position, etc.
+          
+          # coordinates
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[,1][salmon.alive.emerge.index] = fish$xloc 
+          ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[,2][salmon.alive.emerge.index] = fish$yloc
+          
+          # # Create optional plot showing new fish locations
+          # if(plotit != "none"){
+          #   if(plotit != "screen"){png(paste0(plotDir,"/",plotit,".png"), width = 6, height = 6, units = "in", res = 300)}
+          #   plot(basin,col="gray80",border=NA, main = "")
+          #   plot(streams, col="darkgray", add = TRUE)
+          #   points(ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords)
+          #   points(ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[salmon.alive.emerge.index,], col = 2)
+          #   if(plotit != "screen"){dev.off()}
+          # }
+          
+          salmon[salmon.alive.emerge.index,] = fish
+          rm(fish)
+          
+        # Filter out fish that have outmigrated as subyearlings (count segs 0 - 5 as the watershed mouth)
+        if(network == "nhd1") salmon$survive[salmon$seg <= 5] = 2
+        if(network == "rbm") salmon$survive[salmon$seg %in% c(0,2,6,9,14)] = 2
+        salmon.alive.emerge.index = salmon$pid[salmon$survive == 1 & salmon$seg > 0]
+      }
+      
+      # 5b. Move fish_other individually
+      
+      if(SecondSpecies == TRUE){
+        # index for which fish_other are alive
+        fish_other.alive.index = fish_other$pid[fish_other$survive == 1]
+        
+        if(length(fish_other.alive.index) > 0){
+        
+        # set which growth lookup table to use based on species 'spp'
+        sp.idx = 2
+        wt.growth = wt.growth.fish_other
+        fish = fish_other[fish_other.alive.index,]
+        
+        # Run movement decision functions
+        # Get movement distance for fish that can move during this time step
+        moveDist = fncMoveDistance(fish, sp.idx, ssn)
+        
+        # Move fish individually (one fish, one time step)
+        moved = lapply(fish[,"pid"], function(x) fncMoveIndividual(fpid = x, fish, sp.idx, ssn))
+        fish = do.call(rbind, moved)
+        
+        # Update x and y coordinates
+        # if this was a generated network, use straight-line distance calcs
+        # if this network was created in GIS, use different approach for moving along a potentially curvy reach
+        ifelse(length(grep("network-", netnm)) > 0, 
+               locs<- ddply(fish, .(pid), function(x) data.frame(fncGetXY(x$seg, x$ratio, ssn))), 
+               locs<- ddply(fish, .(pid), function(x) data.frame(fncGetXY.arc(x$seg, x$ratio, ssn))))
+        fish$xloc<- locs$xloc
+        fish$yloc<- locs$yloc
+        
+        # Update data in SSN
+        # data table
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$upDist[fish_other.alive.index] = fish$upDist
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$ratio[fish_other.alive.index] = fish$ratio
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data[,xlat][fish_other.alive.index] = fish$xloc
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data[,ylon][fish_other.alive.index] = fish$yloc
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.data$rid[fish_other.alive.index] = fish$seg
+        # note: sp.idx + 1 because 'preds' is in the 1st position, so the first fish is in the second position, etc.
+        
+        # coordinates
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[,1][fish_other.alive.index] = fish$xloc 
+        ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[,2][fish_other.alive.index] = fish$yloc
+        
+        # # Create optional plot showing new fish locations
+        # if(plotit != "none"){
+        #   if(plotit != "screen"){png(paste0(plotDir,"/",plotit,".png"), width = 6, height = 6, units = "in", res = 300)}
+        #   plot(basin,col="gray80",border=NA, main = "")
+        #   plot(streams, col="darkgray", add = TRUE)
+        #   points(ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords)
+        #   points(ssn@predpoints@SSNPoints[[sp.idx + 1]]@point.coords[fish_other.alive.index,], col = 2)
+        #   if(plotit != "screen"){dev.off()}
+        # }
+        
+        fish_other[fish_other.alive.index,] = fish
+        rm(fish)
+        
+        }
+      fish_other.alive.index = fish_other$pid[fish_other$survive == 1 & fish_other$seg > 0] # index for which fish_other are alive
+      }
+      
+
+  # 6. RE-ASSESS HABITAT QUALITY (to incorporate changes after movement into growth calcs)
+        
+      # 6a. Get nearest water temperature (& flow)
+      # Update these fields in fish dataframes
+      if(length(salmon.alive.emerge.index) > 0){
+      salmon$WT[salmon.alive.emerge.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", wt.field)], salmon[salmon.alive.emerge.index,c("pid", "seg", "ratio")], ssn)[,wt.field]
+      if(network == "rbm"){
+        salmon$Q[salmon.alive.emerge.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", q.field)], salmon[salmon.alive.emerge.index,c("pid","seg","ratio")], ssn)[,q.field] 
+      }
+      }
+      
+      if(SecondSpecies == TRUE){
+        if(length(fish_other.alive.index) > 0){
+          fish_other$WT[fish_other.alive.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", wt.field)], fish_other[fish_other.alive.index,c("pid","seg","ratio")], ssn)[,wt.field] 
+          if(network == "rbm"){
+            fish_other$Q[fish_other.alive.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", q.field)], fish_other[fish_other.alive.index,c("pid","seg","ratio")], ssn)[,q.field] 
+          }
+        }
+      }
+        
+      # 6b. Update fish densities to incorporate fish that just moved into density estimates
+      if(length(salmon.alive.emerge.index) > 0){
+        if(SecondSpecies == FALSE) {fish_other = NULL; fish_other.alive.index = NULL}
+        density = as.data.frame(fncFishDensity(salmon, fish_other, salmon.alive.emerge.index, fish_other.alive.index, ssn = ssn))
+        namedvec = density$conspecific.bio.density; names(namedvec) = paste0("x",density$seg)
+        salmon$conspecificdensity = fncGetValue(mykey = paste0("x",salmon$seg), mylookupvector = namedvec)
+        namedvec = density$other.bio.density; names(namedvec) = paste0("x",density$seg)
+        #reset eggs to zero density
+        salmon$conspecificdensity[salmon$emrg==0] = 0
+        salmon$otherdensity = fncGetValue(mykey = paste0("x",salmon$seg), mylookupvector = namedvec)
+        salmon$totaldensity = salmon$conspecificdensity + salmon$otherdensity
+        rm(density, namedvec)
+      }
+      
+      if(SecondSpecies == TRUE){
+        if(length(fish_other.alive.index) > 0){
+          density = as.data.frame(fncFishDensity(fish_other, salmon, fish_other.alive.index, salmon.alive.emerge.index))
+          namedvec = density$conspecific.bio.density; names(namedvec) = paste0("x",density$seg)
+          fish_other$conspecificdensity = fncGetValue(mykey = paste0("x",fish_other$seg), mylookupvector = namedvec)
+          namedvec = density$other.bio.density; names(namedvec) = paste0("x",density$seg)
+          fish_other$otherdensity = fncGetValue(mykey = paste0("x",fish_other$seg), mylookupvector = namedvec)
+          fish_other$totaldensity = fish_other$conspecificdensity + fish_other$otherdensity
+          rm(density, namedvec)
+        }
+      }
+        
+      # 6c. Update available ration after fish have moved and after accounting for density
+        # (ration linearly decreases with fish density at the new location)
+      
+      # For reaches with salmon in them:
+      if(length(salmon.alive.emerge.index) > 0){
+        # choose which density column based on scenario
+        ifelse(interspecific.competition.flag == TRUE, fdens<- salmon$totaldensity, fdens<- salmon$conspecificdensity)
+        
+        # force high densities to cap out at this parameter value
+        fdens[fdens > parameters[1, "maxDensity4Growth"]] = parameters[1, "maxDensity4Growth"]
+        
+        # calculate density effect
+        density.effect = fncRescale((1 - c(fdens, 0.01, parameters[1, "maxDensity4Growth"])), c((0.5), 1))
+          density.effect = density.effect[-c(length(density.effect), (length(density.effect) -1 ))] #remove the last 2 values that were used to standardize the range
+          density.effect = cbind("rid" = salmon$seg, "pid" = salmon$pid, density.effect)
+  
+        # Update ration in SSN & wq.df based on fish density from above
+        namedvec = wq.df$ration_base; names(namedvec) = paste0("x", wq.df$rid)
+        ration1 = fncGetValue(paste0("x", wq.df$rid), namedvec)
+        namedvec = tapply(density.effect[,"density.effect"], density.effect[,"rid"], mean, na.rm = TRUE); names(namedvec) = paste0("x",names(namedvec))
+        dns.eff1 = fncGetValue(paste0("x", wq.df$rid), namedvec)
+        updated.ration = ration1 * dns.eff1
+        #updated.ration = updated.ration[1:nwq]
+        ssn@predpoints@SSNPoints[[1]]@point.data$ration[!is.na(updated.ration)] = 
+          wq.df$ration[!is.na(updated.ration)] = updated.ration[!is.na(updated.ration)]
+      }
+      
+      # For reaches with fish_other in them:
+      if(SecondSpecies == TRUE){
+        if(length(fish_other.alive.index) > 0){
+          # choose which density column based on scenario
+          ifelse(interspecific.competition.flag == TRUE, fdens<- fish_other$totaldensity, fdens<- fish_other$conspecificdensity)
+          
+          # force high densities to cap out at this parameter value
+          fdens[fdens > parameters[1, "maxDensity4Growth"]] = parameters[1, "maxDensity4Growth"]
+          
+          # calculate density effect
+          density.effect = fncRescale((1 - c(fdens, 0.01, parameters[1, "maxDensity4Growth"])), c((0.5), 1))
+          density.effect = density.effect[-c(length(density.effect), (length(density.effect) -1 ))] #remove the last 2 values that were used to standardize the range
+          density.effect = cbind("rid" = fish_other$seg, "pid" = fish_other$pid, density.effect)
+          
+          # Update ration in SSN & wq.df based on fish density from above
+          namedvec = wq.df$ration_base; names(namedvec) = paste0("x", wq.df$rid)
+          ration1 = fncGetValue(paste0("x", wq.df$rid), namedvec)
+          namedvec = tapply(density.effect[,"density.effect"], density.effect[,"rid"], mean, na.rm = TRUE); names(namedvec) = paste0("x",names(namedvec))
+          dns.eff1 = fncGetValue(paste0("x", wq.df$rid), namedvec)
+          updated.ration = ration1 * dns.eff1
+          updated.ration = updated.ration[1:nwq]
+          ssn@predpoints@SSNPoints[[1]]@point.data$ration_ss[!is.na(updated.ration)] = 
+            wq.df$ration_ss[!is.na(updated.ration)] = updated.ration[!is.na(updated.ration)]
+        }
+      }
+      
+      # Update ration in fish dataframes
+      if(length(salmon.alive.emerge.index) > 0){
+        salmon$ration[salmon.alive.emerge.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", "ration")], salmon[salmon.alive.emerge.index,c("pid","seg","ratio")], ssn)[,"ration"] 
+      }
+      
+      if(SecondSpecies == TRUE){
+        if(length(fish_other.alive.index) > 0){
+          fish_other$ration[fish_other.alive.index] = fncGetNearestAttribute(wq.df[,c("pid", "rid", "ratio", "ration_ss")], fish_other[fish_other.alive.index,c("pid","seg","ratio")], ssn)[,"ration_ss"] 
+        }
+      }
+         
+  # 7. GROW FISH. (calculated using the Wisconsin Bioenergetics model equations)
+
+      # salmon:
+      if(length(salmon.alive.emerge.index) > 0){
+        # Get parameters and inputs for Bioenergetics model
+        # provide nearest water temperature, fish weight (grams), and pvals or ration
+        salmon.input= fncGetBioEParms(parameters[1,"spp"], 
+              parameters[1,"pred.en.dens"], parameters[1,"prey.en.dens"],
+              wt.nearest = salmon[salmon.alive.emerge.index,c("pid",wt.field)], 
+              startweights = salmon$weight[salmon.alive.emerge.index],
+              pvals = rep(-9, nrow(salmon[salmon.alive.emerge.index,])), 
+              ration = salmon$ration[salmon.alive.emerge.index])
+        
+        # Run bioenergetics for all fish at this 12-hour time step
+        salmon.results = BioE(salmon.input, salmon.constants)
+        
+        # Put results back into fish dataframe
+        # note: splitting results in half because bioenergetics model operates on 
+        # a daily time step and we are using a half-day time step
+        
+        # instantaneous growth (units are g/d; halved and divided by fish weight to get g/g/12h)
+        salmon$growth[salmon.alive.emerge.index]= t(salmon.results$Growth / 2) / salmon$weight[salmon.alive.emerge.index]
+        # cumulative growth
+        salmon$weight[salmon.alive.emerge.index] = salmon$weight[salmon.alive.emerge.index] + t(salmon.results$Growth / 2)
+        # instantaneous consumption (units are g/g/d; halved to get g/g/12h)
+        salmon$consInst[salmon.alive.emerge.index] = t(salmon.results$Consumption / 2)
+        # cumulative amount consumed
+        salmon$consCum[salmon.alive.emerge.index] = salmon$consCum[salmon.alive.emerge.index] + t(salmon.results$Consumption / 2)
+        # bioenergetic p-values
+        salmon$pvals[salmon.alive.emerge.index] = salmon.input$ration/salmon.results$CMAX
+      }
+      
+      # fish_other:
+      if(SecondSpecies == TRUE){
+        if(length(fish_other.alive.index) > 0){
+          # Get parameters and inputs for Bioenergetics model
+          # provide nearest water temperature, fish weight (grams), and pvals or ration
+          fish_other.input= fncGetBioEParms(parameters[2,"spp"], 
+                parameters[2,"pred.en.dens"], parameters[2,"prey.en.dens"],
+                wt.nearest = fish_other[fish_other.alive.index,c("pid",wt.field)], 
+                startweights = fish_other$weight[fish_other.alive.index],
+                pvals = rep(-9, nrow(fish_other[fish_other.alive.index,])), 
+                ration = fish_other$ration[fish_other.alive.index])
+        
+          # Run bioenergetics for all fish at this 12-hour time step
+          fish_other.results = BioE(fish_other.input, fish_other.constants)
+  
+          # Put results back into fish dataframe
+          # note: splitting results in half because bioenergetics model operates on 
+          # a daily time step and we are using a half-day time step
+          
+          # instantaneous growth (units are g/d; halved and divided by fish weight to get g/g/12h)
+          fish_other$growth[fish_other.alive.index] = t(fish_other.results$Growth / 2) / fish_other$weight[fish_other.alive.index]
+          # cumulative growth
+          fish_other$weight[fish_other.alive.index] = fish_other$weight[fish_other.alive.index] + t(fish_other.results$Growth / 2)
+          # instantaneous consumption (units are g/g/d; halved to get g/g/12h)
+          fish_other$consInst[fish_other.alive.index] = t(fish_other.results$Consumption / 2)
+          # cumulative amount consumed
+          fish_other$consCum[fish_other.alive.index] = fish_other$consCum[fish_other.alive.index] + t(fish_other.results$Consumption / 2)
+          # bioenergetic p-values
+          fish_other$pvals[fish_other.alive.index] = fish_other.input$ration/fish_other.results$CMAX
+          }
+      }
+      
+      # Record the date fish smolt (oumigrate as subyearling)
+      salmon$dateOm[salmon$dateOm == day1 & salmon$survive == 2] = strptime(dat.idx[dd], format = "%Y-%m-%d")
+
+      
+  # 8. PREDATION
+      # If alive, emerged salmon and alive fish_other are in the same segment,
+      # seg is at least as warm as temp.threshold,
+      # fish_other has max.pred.prob of catching a salmon,
+      # each salmon's chances of being eaten decrease as the number
+      # of salmon in that segment increase,
+      # and 75% of fish have emerged
+      if(SecondSpecies == FALSE) interspecific.predation.flag = FALSE
+      if (interspecific.predation.flag == TRUE) {
+        if (length(salmon$emrg[salmon$emrg == 1]) >= trunc(nrow(salmon) * 0.75)) {
+        if(length(salmon.alive.emerge.index) > 0){
+           salmon$survive = fncPredation(prey.survive = salmon$survive,
+                                      prey.emerge  = salmon$emrg,
+                                      prey.seg     = salmon$seg,
+                                      prey.weight  = salmon$weight,
+                                      prey.dist    = salmon$length2segBase,
+                                      pred.survive = fish_other$survive,
+                                      pred.temp    = fish_other$WT,
+                                      pred.seg     = fish_other$seg,
+                                      pred.weight  = fish_other$weight,
+                                      pred.dist    = fish_other$length2segBase,
+                                      pred.move    = fish_other$movedist,
+                                      pred.temp.crit   = parameters[2,"pred.temp.crit"],
+                                      pred.mass.crit = parameters[2,"pred.mass.crit"],
+                                      max.pred.prob    = parameters[2,"max.pred.prob"])
+          salmon.alive.emerge.index = salmon$pid[salmon$emrg == 1 & salmon$survive == 1]
+          }
+        }
+        # Record the date fish were eaten by predator
+        salmon$datePr[salmon$datePr == day1 & salmon$survive == -1] = strptime(dat.idx[dd], format = "%Y-%m-%d")
+      }
+        
+      # 9. OTHER MORTALITY
+      # If survival.flag is on and 75% of fish have emerged,
+      # emerged fish are susceptible to mortality
+      if (survival.flag == TRUE) {
+        if (length(salmon$emrg[salmon$emrg == 1]) >= trunc(nrow(salmon) * 0.75)) {
+          salmon$survive[salmon.alive.emerge.index] = fncSurvive(df = salmon[salmon.alive.emerge.index, c("weight","growth")], minprob = parameters[1,"min.survive.prob"])
+          salmon.alive.emerge.index = salmon$pid[salmon$emrg == 1 & salmon$survive == 1]
+        }
+        # Record the date fish died
+        salmon$dateDi[salmon$dateDi == day1 & salmon$survive == 0] = strptime(dat.idx[dd], format = "%Y-%m-%d")
+        
+        if(SecondSpecies == TRUE){
+          if(length(fish_other.alive.index) > 0){
+            fish_other$survive[fish_other.alive.index] = fncSurvive(df = fish_other[fish_other.alive.index, c("weight","growth")], minprob=parameters[2,"min.survive.prob"])
+            fish_other.alive.index = fish_other$pid[fish_other$survive ==1]
+          }
+        # Record the date fish died
+          fish_other$dateDi[fish_other$dateDi == day1 & fish_other$survive == 0] = strptime(dat.idx[dd], format = "%Y-%m-%d")
+        }
+        
+        # If survival.flag is off and it's the last time step,
+        # fish die if weight < survival.size (survival size threshold)
+      } else { # survival.flag == F
+        if (ii == dim(salmon.array.temporary)[3]) {
+          salmon$survive[salmon$weight < 3] = 0 #hard-coded that fish at least 3g will be marked as survivors
+          if(SecondSpecies == TRUE) fish_other$survive[fish_other$weight < 3] = 0
+        }
+      }
+    
+
+    # Remove Q & WT 
+      ssn = fncUnloadWQ("Q",ssn) 
+      ssn = fncUnloadWQ("WT",ssn) 
+        
+        
+    # Force dates to numeric for storage in arrays
+    # Can be reformatted as date again later as follows:
+    # as.POSIXct(salmon$dateSp, origin = "1970-01-01")
+    salmon.numeric = salmon
+    salmon.numeric[,"dateSp"][salmon.numeric[,"dateSp"] == day1] = NA #unemerged fish
+    salmon.numeric[,"dateEm"][salmon.numeric[,"dateEm"] == day1] = NA #unemerged fish
+    salmon.numeric[,"dateOm"][salmon.numeric[,"dateOm"] == day1] = NA #unemerged fish
+    salmon.numeric[,"datePr"][salmon.numeric[,"datePr"] == day1] = NA #unemerged fish
+    salmon.numeric[,"dateDi"][salmon.numeric[,"dateDi"] == day1] = NA #unemerged fish
+    salmon.numeric[,"dateEm"] = as.numeric(salmon.numeric[,"dateEm"])
+    salmon.numeric[,"dateSp"] = as.numeric(salmon.numeric[,"dateSp"])
+    salmon.numeric[,"dateOm"] = as.numeric(salmon.numeric[,"dateOm"])
+    salmon.numeric[,"datePr"] = as.numeric(salmon.numeric[,"datePr"])
+    salmon.numeric[,"dateDi"] = as.numeric(salmon.numeric[,"dateDi"])
+    
+    if(SecondSpecies == TRUE){
+      fish_other.numeric = fish_other
+      fish_other.numeric[,"dateSp"] = NA
+      fish_other.numeric[,"dateEm"] = NA
+      fish_other.numeric[,"dateOm"] = NA
+      fish_other.numeric[,"datePr"] = NA
+      fish_other.numeric[,"dateDi"] = as.numeric(fish_other.numeric[,"dateDi"])
+    }
+    
+    # Save fish in a multidimensional array through time
+    salmon.array.temporary[,,ii] = as.matrix(salmon.numeric)[,array.cols2keep]
+    if(SecondSpecies == TRUE) fish_other.array.temporary[,,ii] = as.matrix(fish_other.numeric)[,array.cols2keep]
+    ii= ii+1
+        
+
+    } #end time steps (tt)
+  } #end dates (dd)
+
+  # Mark any unemerged fish as dead
+  colnames(salmon.array.temporary) = array.cols2keep
+  salmon.array.temporary[,"survive",dim(salmon.array.temporary)[3]][salmon.array.temporary[,"emrg",dim(salmon.array.temporary)[3]] != 1] = 0
+  
+  # Store results
+  iii= iter-iter.list[1] + 1
+  # Store arrays
+  salmon.array[,,,iii] = salmon.array.temporary
+  colnames(salmon.array) = array.cols2keep
+  # Store outputs
+  salmon.finalstep[,,iii] = as.matrix(salmon.numeric)[,output.cols2keep]
+  colnames(salmon.finalstep) = output.cols2keep
+  if(SecondSpecies == TRUE){
+  fish_other.array[,,,iii]  = fish_other.array.temporary
+  colnames(fish_other.array) = array.cols2keep
+  fish_other.finalstep[,,iii] = as.matrix(fish_other.numeric)[,output.cols2keep]
+  colnames(fish_other.finalstep) = output.cols2keep
+  }
+
+
+
+#Save data
+save("salmon.array", file = paste0(outputDir,"/salmon.array.",cs,".",iter,".RData"))
+save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",cs,".",iter,".RData"))
+if(SecondSpecies == TRUE){
+  save("fish_other.array", file = paste0(outputDir,"/fish_other.array.",cs,".",iter,".RData"))
+  save("fish_other.finalstep",file = paste0(outputDir,"/fish_other.finalstep.",cs,".",iter,".RData"))
+}
+
+end.time = proc.time()
+runtime = (end.time[3] - start.time[3]) / 60
+
+# Store info on no. replicates, climate scenarios, and runtime
+textDir = paste0(outputDir, "/run.info.", cs, ".", iter, ".txt")
+file.create(textDir)
+
+run.info<- c(paste0("netnwork: ",netnm),
+        paste0("replicates: ", length(iter.list)), 
+        paste0("year: ", cs), 
+        paste0("runtime (minutes): ", runtime),
+        paste0("seed: ", iter),
+        paste0("run: ", run),
+        paste0("interspecific.competition.flag: ", interspecific.competition.flag),
+        paste0("interspecific.predation.flag: ", interspecific.predation.flag),
+        paste0("spawn.date.variable: ",spawn.date.variable),
+        paste0("survival.flag: ",survival.flag),
+        paste0("plot.flag: ",plot.flag),
+        paste0("first date:",first.date),
+        paste0("last.date:",last.date))
+salmon.parms = NULL; for(i in 1:ncol(parameters)) {var = colnames(parameters)[i]; salmon.parms[i] = paste0(var,": ",parameters[1,var]); fish_other.parms = NULL}
+if(SecondSpecies == TRUE) for(i in 1:ncol(parameters)) {var = colnames(parameters)[i]; fish_other.parms[i] = paste0(var,": ",parameters[2,var])}
+
+write(c("RUN INFO:", run.info," ","SALMON PARAMETERS:",salmon.parms," ","FISH_OTHER PARAMETERS:",fish_other.parms),file = textDir)
+source("code/plotBasicRunSummary.R")
+} #end iteration
+  
+#Save whole array
+if(length(iter.list) > 1){
+  save("salmon.array", file = paste0(outputDir,"/salmon.array.",cs,".RData"))
+  save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",cs,".RData"))
+  if(SecondSpecies == TRUE){
+    save("fish_other.array", file = paste0(outputDir,"/fish_other.array.",cs,".RData"))
+    save("fish_other.finalstep",file = paste0(outputDir,"/fish_other.finalstep.",cs,".RData"))
+  }
+}
+  
+#=== END OF FILE ===============================================================
