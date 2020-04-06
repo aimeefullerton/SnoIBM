@@ -1,0 +1,13 @@
+SALMON
+nFish = 2241
+0.5 * nFish = 1120
+0.8 * nFish = 1792
+1.2 * nFish = 2689
+1.5 * nFish = 3361
+
+BASS
+nFish = 500
+0.5 * nFish = 250
+0.8 * nFish = 400
+1.2 * nFish = 600
+1.5 * nFish = 750
