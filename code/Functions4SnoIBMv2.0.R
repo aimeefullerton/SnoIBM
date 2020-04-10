@@ -9,7 +9,7 @@
 # Coded by:
 #    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
 #    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
-#    Last Updated 2 Apr 2020
+#    Last Updated 10 Apr 2020
 #
 #*******************************************************************************
 
@@ -159,23 +159,29 @@ fncUnloadWQ<- function(type, ssn = parent.frame()$ssn){
 #ssn = fncUnloadWQ("Q")
 
 #Subsample fish shapefile
-fncFishShp<- function(species, ssn = parent.frame()$ssn, plotit = FALSE){
+fncFishShp<- function(species, nSpawners, nStart, ssn = parent.frame()$ssn, plotit = FALSE){
   
-  fish.id = which(parameters[,"species"] == species) 
-  shpnm = gsub("_1","",parameters[parameters[,"species"] == species, "fish.shp"])
-
-  shp = readOGR(paste0(mydir,"/",loadDir,"/sno.rbm.ssn"), shpnm) #test
-  ssn = importSSN("data.in/sno.rbm.ssn", predpts = 'preds')
-  ssn = importPredpts(ssn, shpnm, "ssn")
-  ssn@predpoints@ID[2] = species
+  # Load shapefile with largest number of possible spawning locations
+  fish.id = which(parameters[,"species"] == species)[1] 
+  shpnm = substr(parameters[fish.id, "fish.shp"], 1, (nchar(parameters[fish.id, "fish.shp"])-4))
+  shpnm2 = paste0(shpnm, nStart)
+  shp = readOGR(paste0(mydir,"/",loadDir,"/", ssn.folder), shpnm2)
+  #\\ ssn = importSSN(paste0("data.in/", ssn.folder), predpts = 'preds')
+  #\\ ssn = importPredpts(ssn, shpnm, "ssn")
+  #\\ ssn@predpoints@ID[2] = species
   #\\ td = getSSNdata.frame(ssn, species)
-
   
-# Subsample how many fish to keep
-  set.seed(iter)
-  fish2keep<- sample(ssn@predpoints@SSNPoints[[2]]@point.data$pid, parameters[fish.id,"nFish"])
-  fish_spawn<- subset(shp, shp@data$pid %in% fish2keep)
-  writeOGR(fish_spawn, paste0(mydir,"/",loadDir,"/sno.rbm.ssn"), paste0(shpnm,"_1"), driver="ESRI Shapefile", overwrite_layer = T)
+  # Subsample how many fish to keep ('nSpawners')
+  set.seed(1)
+  fish2keep = sample(shp@data$pid, nSpawners)
+  fish_spawn = subset(shp, shp@data$pid %in% fish2keep)
+  row.names(fish_spawn@data) = NULL
+  #\\ fish2keep<- sample(ssn@predpoints@SSNPoints[[2]]@point.data$pid, parameters[fish.id,"nFish"])
+  #\\ fish_spawn<- subset(shp, shp@data$pid %in% fish2keep)
+  
+  # Save shapefile for later use
+  writeOGR(fish_spawn, paste0(mydir,"/",loadDir,"/", ssn.folder), substr(shpnm, 1, nchar(shpnm) - 1), driver="ESRI Shapefile", overwrite_layer = T)
+  #writeOGR(fish_spawn, paste0(mydir,"/",loadDir,"/", ssn.folder), paste0(shpnm, nSpawners), driver="ESRI Shapefile", overwrite_layer = T)
   
   if(plotit == TRUE){
     plot(streams, lwd = streams@data$meanmsq / 100000000, col = "darkgray")
@@ -184,7 +190,7 @@ fncFishShp<- function(species, ssn = parent.frame()$ssn, plotit = FALSE){
   }
   #\\ Read back in subsetted shapefile [this how a file will be loaded for modeling]
     # ssn = importSSN("data.in/sno.rbm.ssn", predpts = 'preds')
-    # ssn = importPredpts(ssn, shpnm, "ssn")
+    # ssn = importPredpts(ssn, paste0(shpnm, nSpawners), "ssn")
     # salmon.id = 2 #this is the 2nd preds file loaded in the SSN (see ssn@predpoints@ID)
     # ssn@predpoints@ID[salmon.id]="chinook"
     # td = getSSNdata.frame(ssn,"chinook")
@@ -1195,22 +1201,12 @@ fncGetBioEParms <- function(spp, pred.en.dens, prey.en.dens, wt.nearest, startwe
   
 }
 
-# Constants, lookup from BioE parameters file
-fncReadConstants<- function(spp = "chinook_juvenile2", filepath = paste0(getwd(), "/", loadDir, "/parameters/Input_BioELookup_Tables_ahf.csv")){
-
-  # Read in lookup table
-  cons.df = read.csv(filepath, stringsAsFactors = FALSE)
-  const.df = as.data.frame(t(cons.df[,-1]))
-  colnames(const.df) = cons.df[,1]
-
-  # Get consumption constants
-  Cons = const.df[rownames(const.df) == spp, 1:9]
-  # Get respiration constants
-  Resp = const.df[rownames(const.df) == spp, 10:21]
-  # Get Excretion / Egestion Constants
-  Excr = const.df[rownames(const.df) == spp, 22:28]
-  
-  return(list("Consumption" = Cons, "Respiration" = Resp, "Excretion" = Excr))
+fncReadConstants<- function(spp = "salmon"){
+  salmon.constants = list(parameters[spp, c("ConsEQ", "CA", "CB", "CQ", "CTO", "CTM", "CTL", "CK1", "CK4")], 
+                         parameters[spp, c("RespEQ", "RA", "RB", "RQ", "RTO", "RTM", "RTL", "RK1", "RK4", "ACT", "BACT", "SDA")],
+                         parameters[spp, c("ExcrEQ", "FA", "FB", "FG", "UA", "UB", "UG")])
+  names(salmon.constants) = c("Consumption", "Respiration", "Excretion")
+  return(salmon.constants)
 }
 
 # Consumption Equation 1

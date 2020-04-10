@@ -3,15 +3,18 @@
 ## When fish points were created in GIS with STARS tool, the upDist column did not calculate (error with no explanation)
 # so we are going to create it here instead
 
+library(rgdal)
+library(SSN)
+
 mydir = getwd()
 loadDir = "data.in"
 
-network = "nhd1" #"rbm
+network = "rbm" #"nhd1" #"rbm
 if(network == "nhd1") ssn.folder = "sno.ssn"
 if(network == "rbm") ssn.folder = "sno.rbm.ssn"
 
 # Load Functions
-source("code/Functions4SnoIBM.R")
+source("code/Functions4SnoIBMv2.0.R")
 
 # Network-specific Fields
 if(network == "rbm"){
@@ -67,9 +70,11 @@ writeOGR(chin_out,paste0(mydir,"/",loadDir,"/", ssn.folder),"chin_spawn", driver
 
 
 # Reload
-chin_shp2 = readOGR(paste0(mydir,"/",loadDir,"/", ssn.folder),"chin_spawn") #test
+#chin_shp2 = readOGR(paste0(mydir,"/",loadDir,"/", ssn.folder),"chin_spawn") #test
+chin_shp2 = readOGR(paste0(mydir,"/",loadDir,"/", ssn.folder),"chin_spawn_7785") #test
 sno.ssn = importSSN(paste0(loadDir,"/", ssn.folder), predpts = 'preds')
-sno.ssn = importPredpts(sno.ssn,"chin_spawn","ssn")
+#sno.ssn = importPredpts(sno.ssn,"chin_spawn","ssn")
+sno.ssn = importPredpts(sno.ssn,"chin_spawn_7785","ssn")
 salmon.id = 2 #this is the 2nd preds file loaded in the SSN (see sno.ssn@predpoints@ID)
 sno.ssn@predpoints@ID[salmon.id] = "chinook"
 td = getSSNdata.frame(sno.ssn,"chinook")
@@ -83,12 +88,13 @@ chin_shp2 = subset(chin_shp2, !chin_shp2@data$rid %in% missed)
 n = 1
 for(i in 1:n){
   set.seed(i)
-  #chin2use = sample(sno.ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid, parameters["salmon","nFish"])
+      #chin2use = sample(sno.ssn@predpoints@SSNPoints[[salmon.id]]@point.data$pid, parameters["salmon","nFish"])
+  #parameters["salmon","nFish"] = 3500
   chin2use = sample(chin_shp2@data$pid, parameters["salmon","nFish"])
-  #streams<- readOGR(paste0(getwd(), "/", loadDir, "/", ssn.folder), "edges")
-  #plot(streams,lwd = streams@data$meanmsq / 100000000, col = "darkgray")
-  #plot(chin_shp2, add = 2, col = 2, cex = 0.5)
-  #plot(chin_shp2[chin_shp2@data$pid %in% chin2use,], add = 2, col = 4, cex = 0.5)
+      #streams<- readOGR(paste0(getwd(), "/", loadDir, "/", ssn.folder), "edges")
+      #plot(streams,lwd = streams@data$meanmsq / 100000000, col = "darkgray")
+      #plot(chin_shp2, add = 2, col = 2, cex = 0.5)
+      #plot(chin_shp2[chin_shp2@data$pid %in% chin2use,], add = 2, col = 4, cex = 0.5)
   chin_spawn = subset(chin_shp2, chin_shp2@data$pid %in% chin2use)
   row.names(chin_spawn@data) = NULL
   chin_spawn@data$pid = as.numeric(row.names(chin_spawn@data))
