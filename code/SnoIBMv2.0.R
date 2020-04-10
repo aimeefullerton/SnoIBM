@@ -8,7 +8,7 @@
 # Coded by:
 #    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
 #    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
-#    Last Updated 2 Apr 2020
+#    Last Updated 10 Apr 2020
 #
 # Impassable barriers:
 #    Snoqualmie Falls = rid 488 (network rbm) or rid 53 (network nhd1)
@@ -20,7 +20,8 @@
 #*******************************************************************************
 
 #=== SETUP =====================================================================
-start.time = proc.time()
+rm(list=ls());gc() #clear workspace
+start.time = proc.time() #get initial time stamp for calculating processing time
 
 # Libraries
   library(SSN)
@@ -34,6 +35,8 @@ start.time = proc.time()
   source("code/Functions4SnoIBMv2.0.R")
 
 # Global Variables
+  salmon.nm = "chinook"
+  fish_other.nm = "lmb"
   netnm = "sno" # used for plotting and some functions
   network = "rbm" #nhd1"
   cs = 2005 # climate scenario year
@@ -134,14 +137,19 @@ start.time = proc.time()
   }
 
 # Load model parameters
-  parameters = read.csv(paste0(getwd(), "/", loadDir, "/parameters/model_parameters.csv"), stringsAsFactors = FALSE, header = TRUE, row.names = 1)[1:2,]
-  parameters[, "spawn.date.begin"] = gsub("x","",parameters[, "spawn.date.begin"])
-  parameters[, "om.date.taper"] = gsub("x","",parameters[, "om.date.taper"])
-  parameters[, "om.date.end"] = gsub("x","",parameters[, "om.date.end"])
-
+  parameters.all = read.csv(paste0(loadDir, "/parameters/parameters.csv"), as.is = TRUE)
+  parameters = cbind.data.frame(rbind(salmon.nm, fish_other.nm), t(parameters.all[, c(salmon.nm, fish_other.nm)]), stringsAsFactors = FALSE)
+  colnames(parameters) = c("species",parameters.all$parameter); row.names(parameters) = c("salmon", "fish_other")
+  for(c in 8:ncol(parameters)){ parameters[, c] = as.numeric(parameters[,c])}
+  for(i in c("spawn.date.begin", "om.date.taper", "om.date.end")){ parameters[, i] = gsub("x", "", parameters[, i])}
+  parameters.static = parameters
+  
   # Species-specific constants used in Wisconsin bioenergetics model
-  salmon.constants = fncReadConstants(parameters["salmon", "spp"])
-  if(SecondSpecies == TRUE) fish_other.constants = fncReadConstants(parameters["fish_other", "spp"])
+  salmon.constants = fncReadConstants("salmon")
+  if(SecondSpecies == TRUE) fish_other.constants = fncReadConstants("fish_other")
+
+  # Spawner estimates by year
+  spawner.estimates = read.csv(paste0(getwd(), "/", loadDir, "/parameters/nSpawnersByYear_WDFW.csv"), stringsAsFactors = FALSE, header = TRUE)
 
 # Load copy of SSN (will be kept as loaded backup)
   sno.ssn = ssn = importSSN(paste0(loadDir, "/", ssn.folder) , predpts='preds')
@@ -234,16 +242,18 @@ for(iter in iter.list){
   
   # if running sensitivity analyses:
   if(SA == TRUE){
-    parameters = read.csv(paste0(getwd(), "/", loadDir, "/parameters/model_parameters.csv"), stringsAsFactors = FALSE, header = TRUE, row.names = 1)[1:2,]
-    parameters[, "spawn.date.begin"] = gsub("x","",parameters[, "spawn.date.begin"])
-    parameters[, "om.date.taper"] = gsub("x","",parameters[, "om.date.taper"])
-    parameters[, "om.date.end"] = gsub("x","",parameters[, "om.date.end"])
+    parameters = parameters.static
     parameters = fncGetParametersSA(vary_nFish = TRUE)
   }
   
   # Salmon arrays
-  nFish = parameters["salmon","nFish"]
   # no. of fish, no. variables, no. time steps, no. iterations
+  if(cs %in% spawner.estimates$Year){ # when there are year-specific data from spawner surveys, use it
+    nFish = spawner.estimates$nSpawners[spawner.estimates$Year == cs] / 2.5 * parameters["salmon","eggs.per.redd"] / parameters["salmon","corr.factor"]
+    parameters["salmon", "nFish"] = nFish
+  } else { # when there are no year-specific data, use what is in the parameters file
+    nFish = parameters["salmon", "nFish"] 
+  }
   salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2)) 
   # no. of fish, no. variables, no. iterations; final values so no time component
   salmon.finalstep = array(NA, dim = c(nFish, length(output.cols2keep))) 
@@ -256,6 +266,7 @@ for(iter in iter.list){
     # no. of fish, no. variables, no. iterations; final values so no time component
     fish_other.finalstep = array(NA, dim = c(nFish, length(output.cols2keep))) 
   }
+  rm(nFish)
   
 #=== INITIALIZE HABITAT ========================================================
 
@@ -356,8 +367,9 @@ for(iter in iter.list){
   # 1. Import the fish locations into the SSN
   
   # Salmon
-  #fncFishShp("chinook") #subsets original shapefile to nFish using seed=iter (un-comment to re-run if needed)
-  fish.shp = parameters["salmon", "fish.shp"] # get name of shapefile to load
+  fncFishShp("chinook", parameters["salmon", "nFish"], parameters["salmon", "nStart"]) #subsets original shapefile to nFish
+  fish.shp = substr(parameters["salmon", "fish.shp"], 1, (nchar(parameters["salmon", "fish.shp"])-5))
+  #fish.shp = parameters["salmon", "fish.shp"] # get name of shapefile to load
   ssn = importPredpts(ssn, fish.shp, "ssn") # load into SSN
   salmon.id = 2 # this is the 2nd 'preds' file loaded in the SSN
   ssn@predpoints@ID[salmon.id] = parameters["salmon","species"] # name it
@@ -387,8 +399,9 @@ for(iter in iter.list){
 
   # Other fish
   if(SecondSpecies == TRUE){
-    fish.shp = parameters["fish_other", "fish.shp"] # get name of shapefile to load
-    #fncFishShp("lmb") #subsets original shapefile to nFish using seed=iter (un-comment to re-run if needed)
+    fncFishShp("lmb", parameters["fish_other", "nFish"], parameters["fish_other", "nStart"]) #subsets original shapefile to nFish
+    fish.shp = substr(parameters["fish_other", "fish.shp"], 1, (nchar(parameters["fish_other", "fish.shp"])-5))
+    #fish.shp = parameters["fish_other", "fish.shp"] # get name of shapefile to load
     ssn = importPredpts(ssn, fish.shp, "ssn") # load into SSN
     fish_other.id = 3 # this is the 3rd 'preds' file loaded in the SSN
     ssn@predpoints@ID[fish_other.id] = parameters["fish_other","species"] # name it
