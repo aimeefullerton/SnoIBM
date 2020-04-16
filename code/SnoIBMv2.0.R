@@ -40,7 +40,8 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   fish_other.nm = "lmb"
   netnm = "sno" # used for plotting and some functions
   network = "rbm" #nhd1"
-  cs = 2005 # climate scenario year
+  cs = 2005 # year
+  scenario = "current_climate_riparian_0"
   first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
   last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
   dat.idx = seq(from = first.date, to = last.date, by = 1) # list of all dates to model
@@ -158,9 +159,9 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Load Attribute, Network, and Fish growth data
   if(network == "rbm"){
     # Load DHSVM-RBM flow and water temperature data for the climate scenario
-    Q.df = read.csv(paste0("data.in/rbm.data/Q.",cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    Q.df = read.csv(paste0("data.in/rbm.data/", scenario, "/Q.", cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #Q.df = Q_all.df[Q_all.df$Date >= as.Date(paste0(cs-1,"-09-01")) & Q_all.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
-    WT.df = read.csv(paste0("data.in/rbm.data/WT.",cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(cs-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
     
   } else if(network == "nhd1"){
@@ -1254,4 +1255,5 @@ for(iter in iter.list){
 
 # Produce quick summary
 source("code/QuickRunSummaries.R")
+
 #=== END OF FILE ===============================================================
