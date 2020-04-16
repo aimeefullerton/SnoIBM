@@ -8,7 +8,7 @@ library(dplyr)
 #outputDir = dataDir = paste0("data.out/", tag, ".", cs)
 #first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
 #last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
-#nFish = 2241
+nFish = parameters["salmon","nFish"]
 
 #source("code/plotBasicRunSummary.R")
 #iter = 1
@@ -87,3 +87,19 @@ plot(morts$Date, morts$Count, ylab = "Mortalities", xlab = "", type = 'n', cex.a
   points(ssmort$Date, ssmort$Count, col = 1)
   legend("topright",legend = c("Scour", "Die"), col = c(2,1), pch = 19, bty = 'n', cex = 0.9)
 dev.off()
+
+png(paste0(outputDir, "/mass.png"), width = 6, height = 5, units = "in", res = 300)
+par(mfrow = c(2,1), las = 1, mar = c(4,4,0.5,1), cex = 0.9)
+  #hist(fo$weight[fo$survive == 2], xlim = c(0,30),ylab = "Count", xlab = "mass (g)", main = "", col = "blue")
+  #hist(fo$weight[fo$survive == 1], add = TRUE, col = "orange")
+  hist(fo$weight[fo$survive == 2], ylab = paste0(subyearlings, " subyearlings"), xlab = "", main = "", col = "blue")
+  hist(fo$weight[fo$survive == 1], ylab = paste0(yearlings, " yearlings"), xlab = "mass (g)", main = "", col = "orange")
+dev.off()
+
+# Translate Weight into Length for comparison with smolt trap data:
+# W = a* L ^ b; log(W) = log(a) + b * log(L)
+exp((log(W) - log(a))/b) #exponential equation
+# can't figure out how to back-transform the quadratic equation version
+# W = a * L ^ (b + c * log(L))
+(-exp(cc) + sqrt(exp(c)^2 - 4 * exp(b) * aa)) / 2 * exp(bb) - W #see notes
+
