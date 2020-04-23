@@ -96,10 +96,24 @@ par(mfrow = c(2,1), las = 1, mar = c(4,4,0.5,1), cex = 0.9)
   hist(fo$weight[fo$survive == 1], ylab = paste0(yearlings, " yearlings"), xlab = "mass (g)", main = "", col = "orange")
 dev.off()
 
+
 # Translate Weight into Length for comparison with smolt trap data:
-# W = a* L ^ b; log(W) = log(a) + b * log(L)
-exp((log(W) - log(a))/b) #exponential equation
-# can't figure out how to back-transform the quadratic equation version
+W = 1
+# Exponential relationship
+# W = a* L ^ b
+a = 6.401e-6; b = 3.099 #wet weight exponential relationship from Jellyman et al. (R2 = 0.990)
+#a = 1.092e-7; b = 3.735 #dry weight exponential relationship from Jellyman et al. (R2 = 0.903)
+# log(W) = log(a) + b * log(L)
+exp((log(W) - log(a))/b) #exponential equation 
+
+# Quadratic relationship
 # W = a * L ^ (b + c * log(L))
-(-exp(cc) + sqrt(exp(c)^2 - 4 * exp(b) * aa)) / 2 * exp(bb) - W #see notes
+a = 1.7664e-5; b = 2.7199; c = 0.0788 #wet weight quadratic relationship from Jellyman et al. (R2 = 0.990)
+#a = 4.9091e-13; b = -17.7233; c = 5.5704 #dry weight quadratic relationship from Jellyman et al (R2 = 0.912) #a was 4.9091e13 ?
+# aa * L^2 + bb * L - cc
+aa = exp(c); bb = exp(b); cc = -a
+exp((L = (-bb + sqrt(bb^2 - 4*aa*cc))/2*aa - W)) # ?!@#$!
+#https://www.mathsisfun.com/quadratic-equation-solver.html
+
+
 
