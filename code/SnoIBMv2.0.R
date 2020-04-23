@@ -8,7 +8,7 @@
 # Coded by:
 #    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
 #    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
-#    Last Updated 10 Apr 2020
+#    Last Updated 21 Apr 2020
 #
 # Impassable barriers:
 #    Snoqualmie Falls = rid 488 (network rbm) or rid 53 (network nhd1)
@@ -216,21 +216,21 @@ start.time = proc.time() #get initial time stamp for calculating processing time
                       "pred.prob", "num.prey", "num.eaten")
   output.cols2keep = c("pid", "TU","emrg", "survive", "consCum", "weight", "dateSp", "dateEm", "dateOm", "datePr", "dateDi")
   
-  # Salmon arrays
-  nFish = parameters["salmon", "nFish"]
-  # no. of fish, no. variables, no. time steps, no. iterations
-  salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
-  # no. of fish, no. variables, no. iterations; final values so no time component
-  salmon.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
-  
-  # fish_other arrays
-  if(SecondSpecies == TRUE){
-    nFish = parameters["fish_other", "nFish"]
-    # no. of fish, no. variables, no. time steps, no. iterations
-    fish_other.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
-    # no. of fish, no. variables, no. iterations; final values so no time component
-    fish_other.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
-  }
+  # # Salmon arrays
+  # nFish = parameters["salmon", "nFish"]
+  # # no. of fish, no. variables, no. time steps, no. iterations
+  # salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
+  # # no. of fish, no. variables, no. iterations; final values so no time component
+  # salmon.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
+  # 
+  # # fish_other arrays
+  # if(SecondSpecies == TRUE){
+  #   nFish = parameters["fish_other", "nFish"]
+  #   # no. of fish, no. variables, no. time steps, no. iterations
+  #   fish_other.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
+  #   # no. of fish, no. variables, no. iterations; final values so no time component
+  #   fish_other.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
+  # }
   
 #=== ITERATE (if running more than one replicate) ==============================
 
@@ -307,7 +307,7 @@ for(iter in iter.list){
   segsBlwFalls = unique(ssn@data$rid)[! unique(ssn@data$rid) %in% segsAbvFalls]
   segsBlwRes = unique(segsBlwFalls)[! unique(segsBlwFalls) %in% segsAbvRes]
   segsAccessible = intersect(segsBlwFalls, segsBlwRes)
-  
+
   # Add column to denote which reaches are accessible to fish (for blocking movement)
   ssn@data$accessible = 0
   ssn@data$accessible[ssn@data$rid %in% segsAccessible] = 1 
@@ -351,7 +351,7 @@ for(iter in iter.list){
   #plot(ssn,"ration",breaktype="even",nclasses=6)
   
   # Load Benchmark recurrence interval flows into SSN
-  Q.RI.benchmarks = read.csv("data.in/rbm.data/Q_bm.csv", stringsAsFactors = FALSE)
+  Q.RI.benchmarks = read.csv("data.in/parameters/Q_bm.csv", stringsAsFactors = FALSE)
     Q.RI.benchmarks$Date = as.Date(Q.RI.benchmarks$Date)
     Q.RI.benchmarks = cbind.data.frame("RI" = as.numeric(gsub("Q","",bfQ.field)), Q.RI.benchmarks); ri.vars = bfQ.field
     #Q.RI.benchmarks = read.csv("data.in/parameters/Q.RI.benchmarks.csv", stringsAsFactors = FALSE)
@@ -1051,7 +1051,7 @@ for(iter in iter.list){
       if(length(salmon.alive.emerge.index) > 0){
         # Get parameters and inputs for Bioenergetics model
         # provide nearest water temperature, fish weight (grams), and pvals or ration
-        salmon.input= fncGetBioEParms(parameters["salmon","spp"], 
+        salmon.input= fncGetBioEParms(parameters["salmon","species"], 
               parameters["salmon","pred.en.dens"], parameters["salmon","prey.en.dens"],
               wt.nearest = salmon[salmon.alive.emerge.index,c("pid",wt.field)], 
               startweights = salmon$weight[salmon.alive.emerge.index],
@@ -1088,7 +1088,7 @@ for(iter in iter.list){
         if(length(fish_other.alive.index) > 0){
           # Get parameters and inputs for Bioenergetics model
           # provide nearest water temperature, fish weight (grams), and pvals or ration
-          fish_other.input= fncGetBioEParms(parameters["fish_other","spp"], 
+          fish_other.input= fncGetBioEParms(parameters["fish_other","species"], 
                 parameters["fish_other","pred.en.dens"], parameters["fish_other","prey.en.dens"],
                 wt.nearest = fish_other[fish_other.alive.index,c("pid",wt.field)], 
                 startweights = fish_other$weight[fish_other.alive.index],
@@ -1251,9 +1251,9 @@ for(iter in iter.list){
   
   write(c("RUN INFO:", run.info," ","SALMON PARAMETERS:",salmon.parms," ","FISH_OTHER PARAMETERS:",fish_other.parms),file = textDir)
 
-} #end iteration
-
 # Produce quick summary
 source("code/QuickRunSummaries.R")
+
+} #end iteration
 
 #=== END OF FILE ===============================================================

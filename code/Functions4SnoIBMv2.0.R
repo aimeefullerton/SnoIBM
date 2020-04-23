@@ -1201,12 +1201,13 @@ fncGetBioEParms <- function(spp, pred.en.dens, prey.en.dens, wt.nearest, startwe
   
 }
 
+# Constants, lookup from parameters file
 fncReadConstants<- function(spp = "salmon"){
-  salmon.constants = list(parameters[spp, c("ConsEQ", "CA", "CB", "CQ", "CTO", "CTM", "CTL", "CK1", "CK4")], 
+  fish.constants = list(parameters[spp, c("ConsEQ", "CA", "CB", "CQ", "CTO", "CTM", "CTL", "CK1", "CK4")], 
                          parameters[spp, c("RespEQ", "RA", "RB", "RQ", "RTO", "RTM", "RTL", "RK1", "RK4", "ACT", "BACT", "SDA")],
                          parameters[spp, c("ExcrEQ", "FA", "FB", "FG", "UA", "UB", "UG")])
-  names(salmon.constants) = c("Consumption", "Respiration", "Excretion")
-  return(salmon.constants)
+  names(fish.constants) = c("Consumption", "Respiration", "Excretion")
+  return(fish.constants)
 }
 
 # Consumption Equation 1
