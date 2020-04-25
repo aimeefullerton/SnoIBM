@@ -29,3 +29,12 @@ plot(salmon.array[1,"TU",d][salmon.array[1,"emrg",d] == -1 & salmon.array[1,"sur
 for(r in 2:dim(salmon.array)[1]){
   lines(salmon.array[r,"TU",d][salmon.array[r,"emrg",d] == -1 & salmon.array[r,"survive",d] > 0], col = r)
 }
+
+
+# Flow
+par(mfrow=c(1,1), las = 1)
+plot(Q.df[,paste0("X",redd.rids[1])][Q.df[,"Time"] == 18], type = 'l', axes = F, xlab = "Julian Day", ylab = "Flow (cms)", ylim = c(0,500), main = cs, lty = 3)
+axis(2); axis(1, at = seq(1:395), labels = c(245:365,1:274))
+for(r in 2:length(redd.rids)){
+  lines(Q.df[,paste0("X",redd.rids[r])][Q.df[,"Time"] == 18], lty = 3)
+}
