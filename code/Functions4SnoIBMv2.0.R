@@ -9,7 +9,7 @@
 # Coded by:
 #    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
 #    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
-#    Last Updated 10 Apr 2020
+#    Last Updated 26 Apr 2020
 #
 #*******************************************************************************
 
@@ -1593,7 +1593,7 @@ fncSurvive<- function(df, minprob = 0.98, maxprob = 1, b = 1){
   
   #Growth during this time step that reflects recent conditions (i.e., a hungry/stressed fish may behave in ways that make it more vulnerable to predation, etc.)
   g = df$growth 
-  if(length(g) > 1) g = fncRescale(g, to = c(-0.001, 0.001)) else g = 0
+  if(length(g) > 1 & mean(g) != g[1]) g = fncRescale(g, to = c(-0.001, 0.001)) else g = 0 #added statement to catch if all values of g are already equal
   
   #Probability of survival
   prb.srv = v + g
