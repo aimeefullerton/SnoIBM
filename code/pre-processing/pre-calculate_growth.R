@@ -10,22 +10,30 @@
 # CTL = temp. at which dependence is some reduced fraction (CK4) of maximum rate
 # CK1 & CK4: see above
 
-mydir = paste0(getwd(),"/Work/SnoBIA/snoBIA_git")
-setwd(mydir)
+source("code/Functions4SnoIBMv2.0.R")
+
 loadDir = "data.in"
-source("code/Functions4SnoIBM.R")
-parameters = read.csv("data.in/parameters/model_parameters.csv", stringsAsFactors = FALSE, header = TRUE, row.names = 1)[1:2,]
+salmon.nm = "chinook"
+fish_other.nm = "lmb"
+
+# Load model parameters
+parameters.all = read.csv(paste0(loadDir, "/parameters/parameters.csv"), as.is = TRUE)
+parameters = cbind.data.frame(rbind(salmon.nm, fish_other.nm), t(parameters.all[, c(salmon.nm, fish_other.nm)]), stringsAsFactors = FALSE)
+colnames(parameters) = c("species",parameters.all$parameter); row.names(parameters) = c("salmon", "fish_other")
+for(c in 8:ncol(parameters)){ parameters[, c] = as.numeric(parameters[,c])}
+for(i in c("spawn.date.begin", "om.date.taper", "om.date.end")){ parameters[, i] = gsub("x", "", parameters[, i])}
+
 ration = seq(0.01,0.3,0.001)
 
 ## juvenile Chinook salmon ####
 numFish = 1
-salmon.constants = fncReadConstants("chinook_juvenile2") #using ration
-waterTemps=cbind("pid"=seq(1,length(seq(0.05,25,0.05))),"WT"=seq(0.05,25,0.05))
-wt.growth=array(NA,dim=c(nrow(waterTemps),length(ration),length(seq(1,500,1)))) #dim=c(500 WT, 291 rations, 500 weights)
+salmon.constants = fncReadConstants("salmon") #using ration
+waterTemps = cbind("pid" = seq(1 , length(seq(0.05, 25, 0.05))), "WT" = seq(0.05, 25, 0.05))
+wt.growth = array(NA, dim = c(nrow(waterTemps), length(ration), length(seq(1, 500, 1)))) #dim=c(500 WT, 291 rations, 500 weights)
 for(w in 1:dim(wt.growth)[3]){
   for(r in 1:dim(wt.growth)[2]){
-    salmon.input= fncGetBioEParms("salmon", parameters[1,"pred.en.dens"],
-                                  parameters[1,"prey.en.dens"],parameters[1,"oxy"], parameters[1,"pff"], 
+    salmon.input = fncGetBioEParms(parameters["salmon","species"], 
+                                  parameters["salmon","pred.en.dens"], parameters["salmon","prey.en.dens"],
                                   waterTemps, startweights=rep(w,nrow(waterTemps)), pvals=rep(-9,nrow(waterTemps)),
                                   ration = rep(ration[r],nrow(waterTemps)))
     
@@ -33,10 +41,10 @@ for(w in 1:dim(wt.growth)[3]){
     wt.growth[,r,w] = c(Results$Growth)/w
   }
 }
-save("wt.growth",file = paste0("data.in/fish.growth.lookup/wt.growth.array.", parameters[1,"species"], ".RData"))
+save("wt.growth",file = paste0("data.in/fish.growth.lookup/wt.growth.array.", salmon.nm, ".RData"))
 
 # Read back in and plot
-load(paste0(mydir, "/data.in/fish.growth.lookup/wt.growth.array.", parameters[1,"species"], ".RData"))
+load(paste0(mydir, "/data.in/fish.growth.lookup/wt.growth.array.", salmon.nm, ".RData"))
 assign("wt.growth.salmon", wt.growth)
 rm(wt.growth)
 
