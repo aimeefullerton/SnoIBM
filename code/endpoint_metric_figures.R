@@ -1,4 +1,5 @@
 
+yy = 2005
 #----- Prepare -----------------------------------------------------------------
 
 # load packages
@@ -9,40 +10,39 @@ library(dplyr)
 
 # would you like to save these figures?
 save.figures <- TRUE
-outdir <- "A.2005.scenario11"
-cs = 2005
-iter = 1
 if (save.figures) {
   # specify directory for plot output
-  plot.directory <- paste0(getwd(), "/data.out/",outdir, "/Figures")
+  plot.directory <- paste0(getwd(), "/data.out/Figures")
   if (!dir.exists(plot.directory)) {
     dir.create(plot.directory)
   }
 }
 
 # load four scenarios of data
-load(file = paste0("data.out/", outdir, "/salmon.finalstep.", cs, ".", iter, ".RData"))
-cool.alone.data <- as.data.frame(salmon.finalstep)
-rm(salmon.finalstep)
-#load(file = "data.out/Spawning Runs/A.2015/salmon.finalstep.2015.1.RData")
-#warm.alone.data <- as.data.frame(salmon.finalstep)
-#rm(salmon.finalstep)
-#load(file = "data.out/Spawning Runs/P.2014/salmon.finalstep.2014.1.RData")
-#cool.predation.data <- as.data.frame(salmon.finalstep)
-#rm(salmon.finalstep)
-#load(file = "data.out/Spawning Runs/P.2015/salmon.finalstep.2015.1.RData")
-#warm.predation.data <- as.data.frame(salmon.finalstep)
-#rm(salmon.finalstep)
+iter = 1
+
+outdir0 <- paste0("current_climate_riparian_0.A.", yy)
+load(file = paste0("data.out/", outdir0, "/salmon.finalstep.", yy, ".", iter, ".RData"))
+scenario0.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+outdir1 <- paste0("current_climate_riparian_1.A.", yy)
+load(file = paste0("data.out/", outdir1, "/salmon.finalstep.", yy, ".", iter, ".RData"))
+scenario1.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+outdir2 <- paste0("current_climate_riparian_2.A.", yy)
+load(file = paste0("data.out/", outdir2, "/salmon.finalstep.", yy, ".", iter, ".RData"))
+scenario2.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+outdir3 <- paste0("current_climate_riparian_3.A.", yy)
+load(file = paste0("data.out/", outdir3, "/salmon.finalstep.", yy, ".", iter, ".RData"))
+scenario3.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+
 
 # combine four scenarios into one dataframe
-cool.alone.data <- cbind(scenario = "Baseline", cool.alone.data)
-#warm.alone.data <- cbind(scenario = "Warm", warm.alone.data)
-#cool.predation.data <- cbind(scenario = "Predator", cool.predation.data)
-#warm.predation.data <- cbind(scenario = "Warm-Predator", warm.predation.data)
-#all.scenarios.data <- rbind(cool.alone.data, warm.alone.data, 
-#                            cool.predation.data, warm.predation.data)
-#rm(cool.alone.data, warm.alone.data, cool.predation.data, warm.predation.data)
-all.scenarios.data<- cool.alone.data
+scenario0.data = cbind(scenario = "Scenario 0", scenario0.data)
+scenario1.data = cbind(scenario = "Scenario 1", scenario1.data)
+scenario2.data = cbind(scenario = "Scenario 2", scenario2.data)
+scenario3.data = cbind(scenario = "Scenario 3", scenario3.data)
+all.scenarios.data <- rbind(scenario0.data, scenario1.data, scenario2.data, scenario3.data)
+rm(scenario0.data, scenario1.data, scenario2.data, scenario3.data)
+
 
 # prep data for ggplot2
 all.scenarios.data <- all.scenarios.data %>% 
@@ -78,7 +78,7 @@ all.scenarios.data %>%
   # adjust y-axis label text
   labs(y = "Simulated\nsalmon\n(count)")
 if (save.figures) {
-  ggsave(path = plot.directory, filename = "Figure6.png", plot = last_plot(), 
+  ggsave(path = plot.directory, filename = paste0("FinalState.", yy, ".png"), plot = last_plot(), 
          width = 5.5, height = 4, units = "in", dpi = 300)  
 }
 
@@ -113,7 +113,7 @@ all.scenarios.data %>%
   # add x-axis to each plot
   geom_hline(yintercept = 0)
 if (save.figures) {
-  ggsave(path = plot.directory, filename = "Figure5Subyearling.png", plot = last_plot(), 
+  ggsave(path = plot.directory, filename = paste0("Subyearling.", yy, ".png"), plot = last_plot(), 
          width = 4, height = 6, units = "in", dpi = 300)
 }
 
@@ -146,7 +146,7 @@ all.scenarios.data %>%
   # add x-axis to each plot
   geom_hline(yintercept = 0)
 if (save.figures) {
-  ggsave(path = plot.directory, filename = "Figure5Yearling.png", plot = last_plot(), 
+  ggsave(path = plot.directory, filename = paste0("Yearling.", yy, ".png"), plot = last_plot(), 
          width = 4, height = 6, units = "in", dpi = 300)
 }
 
@@ -215,7 +215,7 @@ phenology.data %>%
   # add x-axis to each plot
   geom_hline(yintercept = 0)
 if (save.figures) {
-  ggsave(path = plot.directory, filename = "Figure4.png", plot = last_plot(), 
+  ggsave(path = plot.directory, filename = paste0("Phenology.", yy, ".png"), plot = last_plot(), 
          width = 6.5, height = 5.5, units = "in", dpi = 300)
 }
 
