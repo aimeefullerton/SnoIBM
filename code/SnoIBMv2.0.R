@@ -20,8 +20,15 @@
 
 #*******************************************************************************
 
-#=== SETUP =====================================================================
+
+#for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")){
+#for(scenario in c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365"))
+# years: 1993:2005 Historical climate; 2087:2099 Future climate; 2003:2013 Baseline
 rm(list=ls());gc() #clear workspace
+scenario = "bcc-csm1-1-m"
+for(yy in 1993:2005){
+
+#=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
 
 # Libraries
@@ -40,10 +47,10 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   fish_other.nm = "lmb"
   netnm = "sno" # used for plotting and some functions
   network = "rbm" #nhd1"
-  cs = 2005 # year
-  scenario = "current_climate_riparian_0"
-  first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
-  last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
+  #yy = 2011 # year
+  #scenario = "current_climate_riparian_3"
+  first.date = as.Date(paste0(yy-1, "-", "09-01")) #starting date for simulation and for spawning
+  last.date = as.Date(paste0(yy, "-", "08-31")) #last date of the simulation
   dat.idx = seq(from = first.date, to = last.date, by = 1) # list of all dates to model
   day1 = strptime(dat.idx[1], format="%Y-%m-%d")
   spawn.date.variable = TRUE # variable spawn date? (set to F to have all fish spawn on first day)
@@ -55,6 +62,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   if(interspecific.competition.flag == FALSE & interspecific.predation.flag == TRUE) tag = "P" #Predation
   if(interspecific.competition.flag == TRUE & interspecific.predation.flag == TRUE) tag = "B" #Both
   ifelse(tag != "A", SecondSpecies<- TRUE, SecondSpecies<- FALSE)
+  tag = paste0(scenario, ".", tag)
   iter.list = 1 #1:10 # list of simulation replicates (iterations) to run
   iter = 1
   plot.iter = 2 # which iteration will have maps plotted for each time step
@@ -85,7 +93,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   loadDir = "data.in"
   if(network == "rbm") ssn.folder = "sno.rbm.ssn"
   if(network == "nhd1") ssn.folder = "sno.ssn"
-  outputDir = paste0("data.out/", tag, ".", cs) 
+  outputDir = paste0("data.out/", tag, ".", yy) 
   # make directories, if they don't already exist
   if (! dir.exists(file.path(paste0(mydir, "/", outputDir)))) {
     dir.create(file.path(paste0(mydir, "/", outputDir)))
@@ -159,15 +167,15 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Load Attribute, Network, and Fish growth data
   if(network == "rbm"){
     # Load DHSVM-RBM flow and water temperature data for the climate scenario
-    Q.df = read.csv(paste0("data.in/rbm.data/", scenario, "/Q.", cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
-    #Q.df = Q_all.df[Q_all.df$Date >= as.Date(paste0(cs-1,"-09-01")) & Q_all.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
-    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
-    #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(cs-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
+    Q.df = read.csv(paste0("data.in/rbm.data/", scenario, "/Q.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    #Q.df = Q_all.df[Q_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & Q_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
+    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
     
   } else if(network == "nhd1"){
     # Load pre-calculated SSN water temperature (flow) data for the climate scenario
     Q.df = NULL
-    WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", cs, ".csv"), header = TRUE, stringsAsFactors = FALSE)
+    WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", yy, ".csv"), header = TRUE, stringsAsFactors = FALSE)
   }
     
 # Get missed segs and network base
@@ -237,8 +245,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Start looping through iterations
 for(iter in iter.list){
   start.time = proc.time()
-  (scenario = paste0(cs, ".", iter))
-  
+
   # Seed for reproducible results, change for each iteration
   set.seed(iter)
   
@@ -250,8 +257,8 @@ for(iter in iter.list){
   
   # Salmon arrays
   # no. of fish, no. variables, no. time steps, no. iterations
-  if(cs %in% spawner.estimates$Year){ # when there are year-specific data from spawner surveys, use it
-    nFish = spawner.estimates$nSpawners[spawner.estimates$Year == cs] / 2.5 * parameters["salmon","eggs.per.redd"] / parameters["salmon","corr.factor"]
+  if(yy %in% spawner.estimates$Year){ # when there are year-specific data from spawner surveys, use it
+    nFish = spawner.estimates$nSpawners[spawner.estimates$Year == yy] / 2.5 * parameters["salmon","eggs.per.redd"] / parameters["salmon","corr.factor"]
     parameters["salmon", "nFish"] = nFish
   } else { # when there are no year-specific data, use what is in the parameters file
     nFish = parameters["salmon", "nFish"] 
@@ -482,7 +489,7 @@ for(iter in iter.list){
   # 3. Initialize variables and determine timing for salmon spawning
   # initialize spawning start date and counter
   spawn.date.begin = parameters["salmon", "spawn.date.begin"]
-  spawn.init = as.Date(paste0(cs - 1, "-", spawn.date.begin))
+  spawn.init = as.Date(paste0(yy - 1, "-", spawn.date.begin))
   spawn.counter = 1
   # determine spawning window and distribution
   # this only applies if salmon spawning is variable (over multiple days) instead of fixed (on one day).
@@ -860,7 +867,7 @@ for(iter in iter.list){
           
         # Filter out fish that have outmigrated as subyearlings
           #unless the date is past when salmon have been observed in smolt trap, then turn them around
-          if(dat.idx[dd] < as.Date(paste0(cs,"-", parameters["salmon","om.date.end"]))){
+          if(dat.idx[dd] < as.Date(paste0(yy,"-", parameters["salmon","om.date.end"]))){
             salmon$survive[salmon$seg %in% network.base.segs] = 2
           } else{
             salmon$direction[salmon$seg == network.base.segs[1] & salmon$direction == 1] = 0
@@ -1222,22 +1229,23 @@ for(iter in iter.list){
 
 
 # Save data for the iteration
-  save("salmon.array", file = paste0(outputDir,"/salmon.array.",cs,".",iter,".RData"))
-  save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",cs,".",iter,".RData"))
+  save("salmon.array", file = paste0(outputDir,"/salmon.array.",yy,".",iter,".RData"))
+  save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",yy,".",iter,".RData"))
   if(SecondSpecies == TRUE){
-    save("fish_other.array", file = paste0(outputDir,"/fish_other.array.",cs,".",iter,".RData"))
-    save("fish_other.finalstep",file = paste0(outputDir,"/fish_other.finalstep.",cs,".",iter,".RData"))
+    save("fish_other.array", file = paste0(outputDir,"/fish_other.array.",yy,".",iter,".RData"))
+    save("fish_other.finalstep",file = paste0(outputDir,"/fish_other.finalstep.",yy,".",iter,".RData"))
   }
 
   end.time = proc.time()
   runtime = (end.time[3] - start.time[3]) / 60 / 60
   
   # Store info on no. replicates, climate scenarios, and runtime
-  textDir = paste0(outputDir, "/run.info.", cs, ".", iter, ".txt")
+  textDir = paste0(outputDir, "/run.info.", yy, ".", iter, ".txt")
   file.create(textDir)
   
   run.info<- c(paste0("netnwork: ",netnm),
-          paste0("year: ", cs), 
+          paste0("year: ", yy),
+          paste0("scenario: ", scenario),
           paste0("runtime (h): ", runtime),
           paste0("seed: ", iter),
           paste0("run: ", run),
@@ -1256,4 +1264,7 @@ source("code/QuickRunSummaries.R")
 
 } #end iteration
 
+
+}
+#}
 #=== END OF FILE ===============================================================

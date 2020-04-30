@@ -962,7 +962,7 @@ fncDownstreamDrive<- function(w, om.mass = 1.5, om.date.taper = "04-01", qq = FA
   
   w[w > om.mass] = om.mass
   
-  om.date.taper = as.Date(paste0(cs, "-", om.date.taper))
+  om.date.taper = as.Date(paste0(yy, "-", om.date.taper))
   if(dat.idx[dd] > om.date.taper){
     om.prob = (w / om.mass) * (1 - as.numeric(dat.idx[dd] - om.date.taper) / as.numeric(dat.idx[length(dat.idx)] - om.date.taper))
   } else{
@@ -1884,10 +1884,10 @@ if(SecondSpecies == FALSE){ # salmon alone scenario
   # dates, gives a range of about a month
   # special handling for 'spawn.date.begin' because the data time series begins on September 1 so can't go earlier
   for(parm in c("spawn.date.begin","om.date.taper","om.date.end")){
-    date.numeric = as.numeric(as.Date(paste0(cs-1, "-", parameters["salmon",parm])))
+    date.numeric = as.numeric(as.Date(paste0(yy-1, "-", parameters["salmon",parm])))
     if(parm == "spawn.date.begin") date.numeric = date.numeric + 10
     thedate = as.Date(round(rnorm(n = 1, mean = date.numeric, sd = 0.00025 * date.numeric),0), origin = "1970-01-01")
-    if(parm == "spawn.date.begin" & thedate < as.Date(paste0(cs-1, "-", "09-01"))){
+    if(parm == "spawn.date.begin" & thedate < as.Date(paste0(yy-1, "-", "09-01"))){
       parameters["salmon",parm] = "09-01"
     } else {
     parameters["salmon",parm] = substr(as.character(thedate),6,10)
@@ -1924,10 +1924,10 @@ if(SecondSpecies == FALSE){ # salmon alone scenario
     # dates, gives a range of about a month
     # special handling for 'spawn.date.begin' because the data time series begins on September 1 so can't go earlier
     for(parm in c("spawn.date.begin","om.date.end")){
-      date.numeric = as.numeric(as.Date(paste0(cs-1, "-", parameters["salmon",parm])))
+      date.numeric = as.numeric(as.Date(paste0(yy-1, "-", parameters["salmon",parm])))
       if(parm == "spawn.date.begin") date.numeric = date.numeric + 10
       thedate = as.Date(round(rnorm(n = 1, mean = date.numeric, sd = 0.00025 * date.numeric),0), origin = "1970-01-01")
-      if(parm == "spawn.date.begin" & thedate < as.Date(paste0(cs-1, "-", "09-01"))){
+      if(parm == "spawn.date.begin" & thedate < as.Date(paste0(yy-1, "-", "09-01"))){
         parameters["salmon",parm] = "09-01"
       } else {
         parameters["salmon",parm] = substr(as.character(thedate),6,10)
