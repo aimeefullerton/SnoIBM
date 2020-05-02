@@ -1,5 +1,4 @@
 
-yy = 2005
 #----- Prepare -----------------------------------------------------------------
 
 # load packages
@@ -20,26 +19,24 @@ if (save.figures) {
 
 # load four scenarios of data
 iter = 1
-
+yy = 2005
 outdir0 <- paste0("current_climate_riparian_0.A.", yy)
 load(file = paste0("data.out/", outdir0, "/salmon.finalstep.", yy, ".", iter, ".RData"))
 scenario0.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+scenario0.data = cbind(scenario = "Scenario 0", scenario0.data)
 outdir1 <- paste0("current_climate_riparian_1.A.", yy)
 load(file = paste0("data.out/", outdir1, "/salmon.finalstep.", yy, ".", iter, ".RData"))
 scenario1.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+scenario1.data = cbind(scenario = "Scenario 1", scenario1.data)
 outdir2 <- paste0("current_climate_riparian_2.A.", yy)
 load(file = paste0("data.out/", outdir2, "/salmon.finalstep.", yy, ".", iter, ".RData"))
 scenario2.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
+scenario2.data = cbind(scenario = "Scenario 2", scenario2.data)
 outdir3 <- paste0("current_climate_riparian_3.A.", yy)
 load(file = paste0("data.out/", outdir3, "/salmon.finalstep.", yy, ".", iter, ".RData"))
 scenario3.data <- as.data.frame(salmon.finalstep); rm(salmon.finalstep)
-
-
-# combine four scenarios into one dataframe
-scenario0.data = cbind(scenario = "Scenario 0", scenario0.data)
-scenario1.data = cbind(scenario = "Scenario 1", scenario1.data)
-scenario2.data = cbind(scenario = "Scenario 2", scenario2.data)
 scenario3.data = cbind(scenario = "Scenario 3", scenario3.data)
+# combine four scenarios into one dataframe
 all.scenarios.data <- rbind(scenario0.data, scenario1.data, scenario2.data, scenario3.data)
 rm(scenario0.data, scenario1.data, scenario2.data, scenario3.data)
 

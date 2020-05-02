@@ -2,6 +2,7 @@
 
 library(dplyr)
 library(chron)
+library(lubridate)
 
 # specify directory for plot output
 plot.directory <- paste0(getwd(), "/data.out/Figures")
@@ -9,7 +10,6 @@ if (!dir.exists(plot.directory)) {dir.create(plot.directory)}
 
 
 # COLORS ----------------------------------------------------------
-# Script currently uses blue and orange
 #Min/max
 c1.0<- rgb(226,226,226,150,NULL,255) #hex #e2e2e2, light gray
 c1.1<- rgb(252,217,156,150,NULL,255) #hex #fcd99c96 orange

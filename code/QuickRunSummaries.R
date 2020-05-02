@@ -2,17 +2,17 @@ library(dplyr)
 
 #Summarize run:
 #spp = "salmon"
-#cs = 2014
+#yy = 2014
 #tag = "P"
 #mydir = getwd()
-#outputDir = dataDir = paste0("data.out/", tag, ".", cs)
-#first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
-#last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
+#outputDir = dataDir = paste0("data.out/", tag, ".", yy)
+#first.date = as.Date(paste0(yy-1, "-", "09-01")) #starting date for simulation and for spawning
+#last.date = as.Date(paste0(yy, "-", "08-31")) #last date of the simulation
 nFish = parameters["salmon","nFish"]
 
 #source("code/plotBasicRunSummary.R")
 #iter = 1
-#load(paste0(outputDir, "/",spp,".finalstep.",cs,".",iter,".RData")) 
+#load(paste0(outputDir, "/",spp,".finalstep.",yy,".",iter,".RData")) 
 fo = as.data.frame(salmon.finalstep)
 fo$dateSp = as.POSIXct(fo$dateSp,origin="1970-01-01")
 fo$dateEm = as.POSIXct(fo$dateEm,origin="1970-01-01")
@@ -31,13 +31,13 @@ scour = fo %>% group_by(as.Date(dateSc)) %>% summarise(Count = length(pid)); sco
 ssmort = fo %>% group_by(as.Date(dateMo)) %>% summarise(Count = length(pid)); ssmort = ssmort[-nrow(ssmort),]; colnames(ssmort)[1] = "Date"
 
 # Save summary metrics
-spawnDates = substr(summary(fo$dateSp[fo$dateSp > as.POSIXct(paste0(cs-1,"-09-01"))]), 1, 10) #spawning dates
-emrgDates = substr(summary(fo$dateEm[fo$dateEm > as.POSIXct(paste0(cs-1,"-09-01")) & fo$emrg ==1]), 1, 10) #emergence dates
-smoltDates = substr(summary(fo$dateOm[fo$dateOm > as.POSIXct(paste0(cs-1,"-09-01")) & fo$survive ==2]), 1, 10) #outmigration dates
-predDates = substr(summary(fo$datePr[fo$datePr > as.POSIXct(paste0(cs-1,"-09-01"))]), 1, 10) #dates eaten by predators
-mortDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(cs-1,"-09-01"))]), 1, 10) #total mortality
-scourDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(cs-1,"-09-01")) & fo$survive == -2]), 1, 10) #dates eggs scoured
-ssMortDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(cs-1,"-09-01")) & fo$survive == 0]), 1, 10) #dates died randomly
+spawnDates = substr(summary(fo$dateSp[fo$dateSp > as.POSIXct(paste0(yy-1,"-09-01"))]), 1, 10) #spawning dates
+emrgDates = substr(summary(fo$dateEm[fo$dateEm > as.POSIXct(paste0(yy-1,"-09-01")) & fo$emrg ==1]), 1, 10) #emergence dates
+smoltDates = substr(summary(fo$dateOm[fo$dateOm > as.POSIXct(paste0(yy-1,"-09-01")) & fo$survive ==2]), 1, 10) #outmigration dates
+predDates = substr(summary(fo$datePr[fo$datePr > as.POSIXct(paste0(yy-1,"-09-01"))]), 1, 10) #dates eaten by predators
+mortDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(yy-1,"-09-01"))]), 1, 10) #total mortality
+scourDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(yy-1,"-09-01")) & fo$survive == -2]), 1, 10) #dates eggs scoured
+ssMortDates = substr(summary(fo$dateDi[fo$dateDi > as.POSIXct(paste0(yy-1,"-09-01")) & fo$survive == 0]), 1, 10) #dates died randomly
 
 subYMass = round(quantile(fo$weight[fo$survive ==2]),2) #subyearling weights
 ylgMass = round(quantile(fo$weight[fo$survive ==1]),2) # yearling weights
@@ -51,7 +51,7 @@ survival = round((subyearlings + yearlings) / nFish, 3) #proportion survived
 
 
 # Store info on no. replicates, climate scenarios, and runtime
-summaryDir = paste0(outputDir, "/quick.summary.", cs, ".", iter, ".txt")
+summaryDir = paste0(outputDir, "/quick.summary.", yy, ".", iter, ".txt")
 file.create(summaryDir)
 
 summary.info<- c(paste0("survival: ", survival),
@@ -72,7 +72,7 @@ write(c("Basic Summary:", summary.info),file = summaryDir)
 #Plots
 png(paste0(outputDir, "/phenology.png"), width = 6, height = 5, units = "in", res = 300)
 par(mfrow = c(2,2), las = 1, mar = c(3,4,0.5,1), cex = 0.9)
-plot(spnd, xlim=c(as.Date(paste0(cs-1,"-09-01-"),origin="1970"), as.Date(paste0(cs,"-08-31-"),origin="1970")), xlab = "", col="gray60", cex.axis = 0.9, cex = 0.5)
+plot(spnd, xlim=c(as.Date(paste0(yy-1,"-09-01-"),origin="1970"), as.Date(paste0(yy,"-08-31-"),origin="1970")), xlab = "", col="gray60", cex.axis = 0.9, cex = 0.5)
   points(emgd, col = 4, cex = 0.5)
   points(smolts, col = 3, cex = 0.5)
   points(ssmort, col = 1, cex = 0.5)
