@@ -23,10 +23,10 @@
 
 #for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")){
 #for(scenario in c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365"))
-# years: 1993:2005 Historical climate; 2087:2099 Future climate; 2003:2013 Baseline
+# years: 1995:2005 Historical climate; 2089:2099 Future climate; 2003:2013 Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
 rm(list=ls());gc() #clear workspace
-scenario = "bcc-csm1-1-m"
-for(yy in 1993:2005){
+scenario = "CCSM4"
+for(yy in 2089:2099){
 
 #=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
@@ -224,22 +224,6 @@ start.time = proc.time() #get initial time stamp for calculating processing time
                       "pred.prob", "num.prey", "num.eaten")
   output.cols2keep = c("pid", "TU","emrg", "survive", "consCum", "weight", "dateSp", "dateEm", "dateOm", "datePr", "dateDi")
   
-  # # Salmon arrays
-  # nFish = parameters["salmon", "nFish"]
-  # # no. of fish, no. variables, no. time steps, no. iterations
-  # salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
-  # # no. of fish, no. variables, no. iterations; final values so no time component
-  # salmon.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
-  # 
-  # # fish_other arrays
-  # if(SecondSpecies == TRUE){
-  #   nFish = parameters["fish_other", "nFish"]
-  #   # no. of fish, no. variables, no. time steps, no. iterations
-  #   fish_other.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2, length(iter.list))) 
-  #   # no. of fish, no. variables, no. iterations; final values so no time component
-  #   fish_other.finalstep = array(NA, dim = c(nFish, length(output.cols2keep), length(iter.list))) 
-  # }
-  
 #=== ITERATE (if running more than one replicate) ==============================
 
 # Start looping through iterations
@@ -247,7 +231,7 @@ for(iter in iter.list){
   start.time = proc.time()
 
   # Seed for reproducible results, change for each iteration
-  set.seed(iter)
+  set.seed(yy + iter)
   
   # if running sensitivity analyses:
   if(SA == TRUE){
@@ -260,8 +244,9 @@ for(iter in iter.list){
   if(yy %in% spawner.estimates$Year){ # when there are year-specific data from spawner surveys, use it
     nFish = spawner.estimates$nSpawners[spawner.estimates$Year == yy] / 2.5 * parameters["salmon","eggs.per.redd"] / parameters["salmon","corr.factor"]
     parameters["salmon", "nFish"] = nFish
-  } else { # when there are no year-specific data, use what is in the parameters file
-    nFish = parameters["salmon", "nFish"] 
+  } else { # when there are no year-specific data, sample from the past spawner distribution
+    nFish = sample(spawner.estimates$nSpawners, 1) / 2.5 * parameters["salmon","eggs.per.redd"] / parameters["salmon","corr.factor"]
+    parameters["salmon", "nFish"] = nFish
   }
   salmon.array = array(NA, dim = c(nFish, length(array.cols2keep), length(dat.idx) * 2)) 
   # no. of fish, no. variables, no. iterations; final values so no time component
@@ -480,7 +465,7 @@ for(iter in iter.list){
     fish_other$yloc= fish_other.df[,ylon]
     fish_other$length2segBase = fish_other.df[,lng2b.field]
     fish_other$upDist = fish_other.df$upDist
-    set.seed(iter)
+    set.seed(yy + iter)
     fish_other$weight = sample(x = seq(1:parameters["fish_other","max.initial.mass"]), size = parameters["fish_other","nFish"], 
               prob = sort(fncRescale(rlnorm(parameters["fish_other","max.initial.mass"],1,parameters["fish_other", "mass.shape"])), decreasing = TRUE))
     rm(fish_other.df)
@@ -503,7 +488,7 @@ for(iter in iter.list){
   # salmon.spawn.times is a vector of numbers, where length is the number of timesteps in the spawning window.
   # each element represents the number of salmon that will spawn for a given timestep,
   # the first element is the number of salmon that will sapwn on the first timestep of spawn.init
-  set.seed(iter)
+  set.seed(yy + iter)
   salmon.spawn.times = histsu(rnorm(nrow(salmon), mean = 0, sd = parameters["salmon", "spawn.date.shape"]), breaks = (parameters["salmon", "nSpawnDays"] * 2), plot = FALSE)$counts
   #\\ sum(salmon.spawn.times); length(salmon.spawn.times); plot(salmon.spawn.times)
 
@@ -520,7 +505,7 @@ for(iter in iter.list){
   dt = 1 # day/time counter
   for(dd in 1:length(dat.idx)){
     for(tt in c(6, 18)){ #6am, 6pm
-      set.seed(iter)
+      set.seed(yy + iter)
       thetitle = fncGetTitle(dat.idx[dd], tt)
       cat(iter, ": ", thetitle, "runtime (h): ", proc.time()[3]/60/60, "\n")
       if(show.progress == TRUE){
@@ -746,7 +731,7 @@ for(iter in iter.list){
             if(sum(salmon$emrg == 0) > 1){
               # sample x = indices of salmon that haven't spawned yet
               # sample n = number of salmon at species.spawn.times[spawn.counter] or number of salmon left unemerged, whichever is smaller
-              set.seed(iter)
+              set.seed(yy + iter)
               spawn.index = sample(x = salmon$pid[salmon$emrg == 0], size = min(sum(salmon$emrg == 0), salmon.spawn.times[spawn.counter]))
             } else{ # else there is one salmon left to spawn,...
               if (salmon.spawn.times[spawn.counter] == 1) spawn.index = which(salmon$emrg == 0)
@@ -785,7 +770,7 @@ for(iter in iter.list){
       
       #Scour redds if peak flows are large enough
       if(network == "rbm"){
-        set.seed(iter)
+        set.seed(yy + iter)
         salmon$survive[salmon$emrg == -1 & salmon$survive == 1] =
         fncPeakFlowSurvival(fish = salmon[salmon$emrg == -1 & salmon$survive == 1, c("pid", "seg", "survive", "Q", ri.vars)])
         # Record the date fish died
@@ -816,7 +801,7 @@ for(iter in iter.list){
         fish = salmon[salmon.alive.emerge.index,]
         
         # Determine a fish's drive to move downstream
-        set.seed(iter)
+        set.seed(yy + iter)
         if(network == "rbm") Q.mult = salmon[salmon.alive.emerge.index, q.field] / salmon[salmon.alive.emerge.index, bfQ.field] * parameters["salmon","push2sea"] else Q.mult = FALSE
         om.prob = fncDownstreamDrive(w = salmon[salmon.alive.emerge.index, "weight"], om.mass = parameters["salmon", "om.mass"], om.date.taper = parameters["salmon", "om.date.taper"], qq = Q.mult)
         fish$direction = rbinom(n = nrow(fish), size = 1, prob = om.prob)
@@ -1169,7 +1154,7 @@ for(iter in iter.list){
        
        
   # 9. OTHER MORTALITY
-      set.seed(iter)
+      set.seed(yy + iter)
       salmon$survive[salmon.alive.emerge.index] = fncSurvive(df = salmon[salmon.alive.emerge.index, c("weight","growth")], minprob = parameters["salmon","survival.min"], maxprob = parameters["salmon","survival.max"], b = parameters["salmon","survival.shape"])
       salmon.alive.emerge.index = salmon$pid[salmon$emrg == 1 & salmon$survive == 1]
       # Record the date fish died
