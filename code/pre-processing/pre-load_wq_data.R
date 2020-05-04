@@ -2,6 +2,7 @@
 
 # Load Functions
 source("code/Functions4SnoIBMv2.0.R")
+library(SSN)
 loadDir = "data.in"
 
 for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")){
@@ -22,7 +23,7 @@ for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "c
 }
 
 
-for(scenario in c("bcc-csm1-1-m","CanESM2","CCSM4","CNRM-CM5","CSIRO-Mk3-6-0","HadGEM2-CC365")){
+for(scenario in c("bcc-csm1-1-m","CanESM2","CCSM4","CNRM-CM5","CSIRO-Mk3-6-0","HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")){
   ssn = importSSN(paste0(loadDir, "/sno.rbm.ssn") , predpts='preds')
   
   timeperiod = "historical"
