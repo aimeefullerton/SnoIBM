@@ -8,7 +8,7 @@
 # Coded by:
 #    A.H. Fullerton (general), B.L. Hawkins (second species, predation), 
 #    B.J. Burke (movement), N. Som (network shapes) & M. Nahorniak (bioenergetics) 
-#    Last Updated 23 Apr 2020
+#    Last Updated 5 May 2020
 #
 # Impassable barriers:
 #    Snoqualmie Falls = rid 488 (network rbm) or rid 53 (network nhd1)
@@ -20,8 +20,17 @@
 
 #*******************************************************************************
 
-#=== SETUP =====================================================================
+#for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")){
+#for(scenario in c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")){
+# years: 1995:2005 Historical climate; 2089:2099 Future climate; 2003:2013 Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
+#for(salmon.nm in c("chinook", "coho", "steelhead", "rainbow", "pink", "lmb")){
+
 rm(list=ls());gc() #clear workspace
+for(scenario in c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")){
+for(yy in c(1995:2005, 2089:2099)){
+salmon.nm = "chinook"
+  
+#=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
 
 # Libraries
@@ -35,17 +44,16 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   source("code/Functions4SnoIBMv2.0.R")
 
 # Global Variables
-  salmon.nm = "coho"
   netnm = "sno" # used for plotting and some functions
   network = "rbm" #nhd1"
-  cs = 2008 # year
-  scenario = "current_climate_riparian_0"
-  first.date = as.Date(paste0(cs-1, "-", "09-01")) #starting date for simulation and for spawning
-  last.date = as.Date(paste0(cs, "-", "08-31")) #last date of the simulation
+  #salmon.nm = "chinook"
+  #yy = 2008 # year
+  #scenario = "current_climate_riparian_0"
+  first.date = as.Date(paste0(yy-1, "-", "09-01")) #starting date for simulation and for spawning
+  last.date = as.Date(paste0(yy, "-", "08-31")) #last date of the simulation
   dat.idx = seq(from = first.date, to = last.date, by = 1) # list of all dates to model
   day1 = strptime(dat.idx[1], format="%Y-%m-%d")
   iter = 1
-  plot.iter = 1 # which iteration will have maps plotted for each time step
   run = fncGetRun()
   show.progress = TRUE # send statements to the console showing progress
 
@@ -70,23 +78,23 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   loadDir = "data.in"
   if(network == "rbm") ssn.folder = "sno.rbm.ssn"
   if(network == "nhd1") ssn.folder = "sno.ssn"
-  outputDir = paste0("data.out/GrwPot.", cs) 
+  outputDir = paste0("data.out/GrwPot.", salmon.nm, ".", scenario, ".", yy) 
   # make directories, if they don't already exist
   if (! dir.exists(file.path(paste0(mydir, "/", outputDir)))) {
     dir.create(file.path(paste0(mydir, "/", outputDir)))
   }
 
 # Plotting
-  plot.flag = TRUE
-  plot.WT = TRUE
-  plot.GP = TRUE
+  plot.flag = FALSE
+  plot.WT = FALSE
+  plot.GP = FALSE
   
   imageDir= paste0(outputDir, "/images")
   if (!dir.exists(file.path(imageDir))) {
     dir.create(file.path(imageDir))
   }
-  dir.create(file.path(paste0(mydir, "/", imageDir, "/WT")))
-  dir.create(file.path(paste0(mydir, "/", imageDir, "/GrwPot")))
+  if(plot.WT) dir.create(file.path(paste0(mydir, "/", imageDir, "/WT")))
+  if(plot.GP) dir.create(file.path(paste0(mydir, "/", imageDir, "/GrwPot")))
   
   # Color palette for plotting
   grays = brewer.pal(9, "Greys")
@@ -142,12 +150,12 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Load Attribute, Network, and Fish growth data
   if(network == "rbm"){
     # Load DHSVM-RBM water temperature data for the climate scenario
-    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", cs, ".df"), header = TRUE, stringsAsFactors = FALSE)
-    #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(cs-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(cs,"-09-30")),] #limit to the correct year
+    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
     
   } else if(network == "nhd1"){
     # Load pre-calculated SSN water temperature data for the climate scenario
-    WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", cs, ".csv"), header = TRUE, stringsAsFactors = FALSE)
+    WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", yy, ".csv"), header = TRUE, stringsAsFactors = FALSE)
   }
     
 # Get missed segs and network base
@@ -186,9 +194,6 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   output.cols2keep = c("pid", "TU","emrg", "survive", "consCum", "weight", "dateSp", "dateEm", "dateOm", "datePr", "dateDi")
 
 
-  start.time = proc.time()
-  (scenario = paste0(cs, ".", iter))
-  
   # Seed for reproducible results, change for each iteration
   set.seed(iter)
   
@@ -432,7 +437,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   # 3. Plot maps
       
       # A. Plot water temperature
-      if(plot.WT == TRUE){
+      if(plot.WT){
         
         #plot water temperature for dd & tt as colored stream lines:
         png(paste0(mydir, "/", imageDir, "/WT/WT_", dat.idx[dd], "-", sprintf("%03d", tt), ".png"), width = 9, height = 6, units = "in", res = 150)
@@ -508,7 +513,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
         
         
       # B. Plot growth potential map
-      if(plot.GP == TRUE){
+      if(plot.GP){
           
         wq.df$growth = ssn@data$growth = 0
         wq.df$growth[wq.df$rid %in% segsAccessible] = salmon$growth[salmon$seg %in% segsAccessible]
@@ -603,18 +608,18 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 
 
 # Save data for the iteration
-  save("salmon.array", file = paste0(outputDir,"/salmon.array.",cs,".",iter,".RData"))
-  save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",cs,".",iter,".RData"))
+  save("salmon.array", file = paste0(outputDir,"/salmon.array.",yy,".",iter,".RData"))
+  save("salmon.finalstep",file = paste0(outputDir,"/salmon.finalstep.",yy,".",iter,".RData"))
 
   end.time = proc.time()
   runtime = (end.time[3] - start.time[3]) / 60 / 60
   
   # Store info on no. replicates, climate scenarios, and runtime
-  textDir = paste0(outputDir, "/run.info.", cs, ".", iter, ".txt")
+  textDir = paste0(outputDir, "/run.info.", yy, ".", iter, ".txt")
   file.create(textDir)
   
   run.info<- c(paste0("netnwork: ",netnm),
-          paste0("year: ", cs), 
+          paste0("year: ", yy), 
           paste0("runtime (h): ", runtime),
           paste0("seed: ", iter),
           paste0("run: ", run),
@@ -626,8 +631,9 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 
 
 #=== SUMMARY MAPS ==============================================================
-  
-#load(paste0(outputDir, "/salmon.array.",cs,".1.RData"))  
+
+if(plot.flag){
+#load(paste0(outputDir, "/salmon.array.",yy,".1.RData"))  
   
 # Make GP maps
   gr = salmon.array[,"growth",]
@@ -638,7 +644,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   gr.spr = t(apply(gr[,425:606], 1, quantile, na.rm = T)) # Apr, May, Jun
   
 for(s in 1:5){
-  if(s == 1) {gr.dat = gr.year; gr.nam1 = cs}
+  if(s == 1) {gr.dat = gr.year; gr.nam1 = yy}
   if(s == 2) {gr.dat = gr.fall; gr.nam1 = "Autumn"}
   if(s == 3) {gr.dat = gr.win; gr.nam1 = "Winter"}
   if(s == 4) {gr.dat = gr.spr; gr.nam1 = "Spring"}
@@ -717,7 +723,7 @@ for(s in 1:5){
   wt.spr = t(apply(wt[,425:606], 1, quantile, na.rm = T))
   
 for(s in 1:5){
-  if(s == 1) {wt.dat = wt.year; wt.nam1 = cs}
+  if(s == 1) {wt.dat = wt.year; wt.nam1 = yy}
   if(s == 2) {wt.dat = wt.fall; wt.nam1 = "Autumn"}
   if(s == 3) {wt.dat = wt.win; wt.nam1 = "Winter"}
   if(s == 4) {wt.dat = wt.spr; wt.nam1 = "Spring"}
@@ -786,5 +792,8 @@ for(s in 1:5){
     dev.off()
   }
 }
-  
+}
 #=== END OF FILE ===============================================================
+
+}
+}
