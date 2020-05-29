@@ -661,6 +661,7 @@ fncMoveDistance<- function(fish = parent.frame()$fish, sp.idx, ssn = parent.fram
   wt.field = get("wt.field")
   fpids = fish[,"pid"]
   nFish = length(fpids)
+  om.mass = parameters[sp.idx, "om.mass"]
   
   # look up growth at fish’s location based on its WT, ration, and weight
   growths = matrix(NA, nFish, 3, dimnames = list(fpids, c("growth", "growth.pot", "growth.min")))
@@ -711,12 +712,24 @@ fncStopEarly<- function(fpid, seg = parent.frame()$seg, remainingDist, moveLengt
     probStop1 = 1 - diff(c(growth.here, max(result2))) / diff(range(result2))
     if(probStop1 > 1) probStop1 = 1 # can't be higher than 1
     
-    # probability of stopping due to fish's drive to outmigrate
+    # probability of not stopping due to fish's drive to outmigrate
       # bigger values mean higher probability of stopping
     probStop2 = 1 - om.prob2
     
+    # probability of not stopping because fish is getting pushed to sea by high flows
+    if(network == "rbm" & sp.idx == 1){ #only for RBM and salmon
+      flow.ratio <- fish[, q.field][fish[,"pid"] == fpid] / fish[, bfQ.field][fish[,"pid"] == fpid] #depends on flow conditions relative to bankfull flow
+      if(flow.ratio >= 1) flow.ratio <- 1 # this has no effect if flow at fish's location is higher than bankfull flow
+      probStop3 <- 1 - flow.ratio
+    }
+
     # cumulative probability of stopping
-    probStop = probStop1 * probStop2
+    if(network == "rbm" & sp.idx == 1){ #only for RBM and salmon
+      probStop <- 1 / (1/3 * (1/probStop1 + 1/probStop2 + 1/probStop3)) #harmonic mean (good for averaging ratios)
+      #probStop <- (probStop1 * probStop2 * probStop3)^(1/3) #geometric mean
+    } else{
+      probStop <- 1 / (1/2 * (1/probStop1 + 1/probStop2)) #no effect of flow
+    }
     
     #prob. of stopping, prob. of continuing
     pStop<- c(probStop, (1 - probStop)) 
@@ -957,26 +970,24 @@ fncMoveIndividual<- function(fpid, fish = parent.frame()$fish, sp.idx, ssn = par
 
 # Bias movement direction downstream as fish grows larger 
 # but after a date threshold, fish loses the outmigration drive and becomes a yearling
-# optional: bias movement direction downstream as function of flow in addition to date and size 
-fncDownstreamDrive<- function(w, om.mass = 1.5, om.date.taper = "04-01", qq = FALSE){
+# "Biological clock" aspect of outmigration
+fncDownstreamDrive<- function(w, om.mass = 3, om.date.taper = "06-01"){
   
-  w[w > om.mass] = om.mass
+  # fish mass-based probability
+  w[w > om.mass] <- om.mass
+  prob1 <- w / om.mass
   
-  om.date.taper = as.Date(paste0(yy, "-", om.date.taper))
-  if(dat.idx[dd] > om.date.taper){
-    om.prob = (w / om.mass) * (1 - as.numeric(dat.idx[dd] - om.date.taper) / as.numeric(dat.idx[length(dat.idx)] - om.date.taper))
-  } else{
-    om.prob = w / om.mass 
-  }
+  # date taper-based probability
+  om.date.taper <- as.Date(paste0(yy, "-", om.date.taper))
+  ifelse(dat.idx[dd] > om.date.taper, prob2 <- (1 - as.numeric(dat.idx[dd] - om.date.taper) / as.numeric(dat.idx[length(dat.idx)] - om.date.taper)), prob2 <- 1)
   
-  # Influence probability depending on flow conditions relative to bankfull flow
-  # (higher flows push fish toward downstream movement)
-  # (if om.prob is already high, this has no effect; if om.prob is low (small fish, late in season) and
-  # there is a high flow event, om.prob will become larger)
-  if(is.numeric(qq)){om.prob = om.prob * qq}
+  # combine probabilities
+  om.prob <- 1 / (1/2 * (1/prob1 + 1/prob2)) #harmonic mean (good for averaging ratios)
+  #om.prob <- (prob1 * prob2) ^ (1/2) #geometric mean 
+  #om.prob <- mean(c(prob1, prob2)) #arithmetic mean 
   
-  # constrain between 0.5 (equal chance of moving up or down) and nearly 1 (maximum downstream drive)
-  om.prob[om.prob >= 1] = 0.999; om.prob[om.prob < 0.5] = 0.5
+  # constrain between 0.5 (equal chance of moving up or down) and 1 (maximum downstream drive)
+  om.prob[om.prob >= 1] <- 1; om.prob[om.prob < 0.5] <- 0.5
   
   return(om.prob)
 }
