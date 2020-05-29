@@ -27,7 +27,8 @@
 # years: 1995:2005 Historical climate; 2089:2099 Future climate; 2003:2013 Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
 rm(list=ls());gc() #clear workspace
 scenario = "current_climate_riparian_0"
-for(yy in 2003:2013){
+yy = 2005
+#for(yy in 2003:2013){
 
 #=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
@@ -66,7 +67,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   tag = paste0(scenario, ".", tag)
   iter.list = 1 #1:10 # list of simulation replicates (iterations) to run
   iter = 1
-  plot.iter = 2 # which iteration will have maps plotted for each time step
+  plot.iter = 1 # which iteration will have maps plotted for each time step
   run = fncGetRun()
   show.progress = TRUE # send statements to the console showing progress
   SA = FALSE # run sensitivity analysis
@@ -512,8 +513,8 @@ for(iter in iter.list){
       if(show.progress == TRUE){
         cat(length(salmon$emrg[salmon$emrg == -1 & salmon$survive == 1]), " eggs incubating", "\n")
         cat(length(salmon$survive[salmon$survive == -2]), "eggs scoured", "\n")
-        cat(length(salmon$weight[salmon$survive == 2]), " subyearling smolts: ", quantile(salmon$weight[salmon$survive == 2]), "\n")
-        cat(length(salmon$weight[salmon$survive == 1 & salmon$emrg == 1]), " rearing in stream: ", quantile(salmon$weight[salmon$survive == 1]), "\n")
+        cat(length(salmon$weight[salmon$survive == 2]), " subyearling smolts: ", summary(salmon$weight[salmon$survive == 2]), "\n")
+        cat(length(salmon$weight[salmon$survive == 1 & salmon$emrg == 1]), " rearing in stream: ", summary(salmon$weight[salmon$survive == 1]), "\n")
         cat("proportion yearlings: ", length(salmon$weight[salmon$survive == 1]) / (length(salmon$weight[salmon$survive == 2]) + length(salmon$weight[salmon$survive == 1])), "\n")
         cat("fry-to-smolt survival: ", length(salmon$weight[salmon$survive > 0]) / parameters["salmon","nFish"], "\n")
         if(SecondSpecies == TRUE) cat(length(salmon$survive[salmon$survive == -1]), "salmon eaten", "\n")
@@ -803,8 +804,7 @@ for(iter in iter.list){
         
         # Determine a fish's drive to move downstream
         set.seed(yy + iter)
-        if(network == "rbm") Q.mult = salmon[salmon.alive.emerge.index, q.field] / salmon[salmon.alive.emerge.index, bfQ.field] * parameters["salmon","push2sea"] else Q.mult = FALSE
-        om.prob = fncDownstreamDrive(w = salmon[salmon.alive.emerge.index, "weight"], om.mass = parameters["salmon", "om.mass"], om.date.taper = parameters["salmon", "om.date.taper"], qq = Q.mult)
+        om.prob = fncDownstreamDrive(w = salmon[salmon.alive.emerge.index, "weight"], om.mass = parameters["salmon", "om.mass"], om.date.taper = parameters["salmon", "om.date.taper"])
         fish$direction = rbinom(n = nrow(fish), size = 1, prob = om.prob)
         fish$om.prob = om.prob
 
@@ -1251,6 +1251,7 @@ source("code/QuickRunSummaries.R")
 } #end iteration
 
 
-}
+
+#}
 #}
 #=== END OF FILE ===============================================================
