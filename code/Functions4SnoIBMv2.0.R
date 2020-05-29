@@ -674,13 +674,21 @@ fncMoveDistance<- function(fish = parent.frame()$fish, sp.idx, ssn = parent.fram
   growths[,"growth.pot"] = tmp.range[,2]
   growths[,"growth.min"] = tmp.range[,1]
 
-  #movement probability and distance is influenced by how close fish's current growth is to max growth potential
-  #bigger values mean higher probability of longer movements
+  # movement distance is influenced by how close fish's current growth is to max growth potential
+    # bigger values mean higher probability of longer movements
   gr.diff = apply(growths[,c("growth","growth.pot"), drop = FALSE], 1, diff) / apply(growths[,c("growth.min","growth.pot"), drop = FALSE], 1, diff)
-
-  # draw from lognormal distribution where mean is the growth difference and sd is a parameter
+  
+  # bigger fish can move farther, increases as they grow up to om.mass
+  mass.ratio <- fish$weight / om.mass
+  mass.ratio[mass.ratio > 1] <- 1
+  
+  # lognormal mean
+  meanval <- 1 / (1/2 * (1/gr.diff + 1/mass.ratio)) #harmonic mean (good for averaging ratios)
   # movement multiplier parameter is used to increase movement in certain scenarios
-  moveDist<- rlnorm(nFish, meanlog = (gr.diff * mvmt.scalar), sdlog = mvdist.shape)
+  meanval <- meanval * mvmt.scalar
+  
+  # draw from lognormal distribution where mean is the growth difference and sd is a parameter
+  moveDist<- rlnorm(nFish, meanlog = meanval, sdlog = mvdist.shape)
   
   if(SecondSpecies == TRUE) moveDist = moveDist * mvmt.scalar #high site fidelity
   
@@ -706,7 +714,6 @@ fncStopEarly<- function(fpid, seg = parent.frame()$seg, remainingDist, moveLengt
     # look up growth possible for each fish across accessible reaches during this time step
     result2 = fncGrowthPossible(fish[,"weight"][fish[,"pid"] == fpid], sp.idx)
      
-    
     # probability of stopping due to good habitat (growth in reach relative to max growth potential in stream network)
       # bigger values mean higher probability of stopping
     probStop1 = 1 - diff(c(growth.here, max(result2))) / diff(range(result2))
