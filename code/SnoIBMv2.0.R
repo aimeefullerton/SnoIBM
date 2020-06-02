@@ -27,8 +27,8 @@
 # years: 1995:2005 Historical climate; 2089:2099 Future climate; 2003:2013 Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
 rm(list=ls());gc() #clear workspace
 scenario = "current_climate_riparian_0"
-yy = 2005
-#for(yy in 2003:2013){
+#yy = 2005
+for(yy in c(2006:2013)){
 
 #=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
@@ -67,7 +67,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   tag = paste0(scenario, ".", tag)
   iter.list = 1 #1:10 # list of simulation replicates (iterations) to run
   iter = 1
-  plot.iter = 1 # which iteration will have maps plotted for each time step
+  plot.iter = 2 # which iteration will have maps plotted for each time step
   run = fncGetRun()
   show.progress = TRUE # send statements to the console showing progress
   SA = FALSE # run sensitivity analysis
@@ -1253,5 +1253,5 @@ source("code/QuickRunSummaries.R")
 
 
 #}
-#}
+}
 #=== END OF FILE ===============================================================
