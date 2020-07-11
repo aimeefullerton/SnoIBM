@@ -140,7 +140,7 @@ fncLoadQ_RI<- function(dat.df = Q.RI.benchmarks, ssn = parent.frame()$ssn){
 #Unload flow and water temperature data from SSN
 fncUnloadWQ<- function(type, ssn = parent.frame()$ssn){
   
-  dat = getSSNdata.frame(ssn, "preds")
+  dat = SSN::getSSNdata.frame(ssn, "preds")
   
   if(type == "Q"){
     if(length(which(colnames(dat) == "Q")) > 0) dat = dat[,-which(colnames(dat) == "Q")]
@@ -152,7 +152,7 @@ fncUnloadWQ<- function(type, ssn = parent.frame()$ssn){
     if(length(which(colnames(ssn@data) == "WT")) > 0) ssn@data = ssn@data[,-which(colnames(ssn@data) == "WT")]
     if(length(which(colnames(ssn@data) == "WT.color")) > 0) ssn@data = ssn@data[,-which(colnames(ssn@data) == "WT.color")]
   }
-  ssn = putSSNdata.frame(dat, ssn, "preds")
+  ssn = SSN::putSSNdata.frame(dat, ssn, "preds")
   
   return(ssn)
 }

@@ -169,9 +169,9 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Load Attribute, Network, and Fish growth data
   if(network == "rbm"){
     # Load DHSVM-RBM flow and water temperature data for the climate scenario
-    Q.df = read.csv(paste0("data.in/rbm.data/", scenario, "/Q.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    Q.df = read.csv(paste0("data.in/rbm.data/riparian0/", scenario, "/Q.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #Q.df = Q_all.df[Q_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & Q_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
-    WT.df = read.csv(paste0("data.in/rbm.data/", scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    WT.df = read.csv(paste0("data.in/rbm.data/riparian0/", scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
     
   } else if(network == "nhd1"){
