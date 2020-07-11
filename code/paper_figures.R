@@ -1,0 +1,1086 @@
+# Figures used for Fullerton et al. manuscript describing results from climate and riparian scenario effects on Chinook salmon
+# Last updated 10 July 2010
+
+# Load packages
+library(tidyverse)
+library(sf)
+# Depends (packages that must be installed but don't need to be loaded):
+# lubridate
+# ggpubr
+# SSN
+# abind
+# RColorBrewer
+
+source("code/Functions4SnoIBMv2.0.R")
+
+# Set up directory structure
+data.in <- "/Volumes/BluPassport/SnoIBM/data.in"
+data.out<- "/Volumes/BluPassport/SnoIBM/data.out"
+ssn.folder <- "sno.rbm.ssn"
+save.figures <- TRUE
+plot.directory <- "plots"
+if (!dir.exists(plot.directory)) {dir.create(plot.directory)}
+
+# COLORS 
+fncColors4Quantiles <- function(){
+  #Min/max
+  c1.0<- rgb(226,226,226,150,NULL,255) #hex #e2e2e2, light gray
+  c1.1<- rgb(252,217,156,150,NULL,255) #hex #fcd99c96 orange
+  c1.2<- rgb(247,246,187,150,NULL,255) #hex #f7f6bb96 yellow
+  c1.3<- rgb(176,191,252,150,NULL,255) #hex #b0bffc96 blue
+  c1.4<- rgb(209,167,207,150,NULL,255) #hex #d1a7cf purple
+  c1.5<- rgb(196,237,197,150,NULL,255) #hex #e2e2e2 green
+  c1.6<- rgb(171,201,205,150,NULL,255) #hex #abc9cd aqua
+  
+  #Q1/Q3
+  c2.0<- rgb(142,142,142,200,NULL,255) #hex #8e8e8e, gray
+  c2.1<- rgb(234,173,68,200,NULL,255) #hex #eaad44c8 orange
+  c2.2<- rgb(239,237,95,200,NULL,255) #hex #efed5fc8 yellow
+  c2.3<- rgb(128,153,252,200,NULL,255) #hex #809ffcc8 blue
+  c2.4<- rgb(137,101,136,200,NULL,255) #hex #896588 purple
+  c2.5<- rgb(81,198,83,200,NULL,255) #hex #8e8e8e green
+  c2.6<- rgb(74,146,155,200,NULL,255) #hex #4a929b aqua
+  
+  #Median
+  c3.0<- rgb(5,5,5,255,NULL,255) #black
+  c3.1<- rgb(244,155,2,255,NULL,255) #hex #f49b02ff orange
+  c3.2<- rgb(206,193,8,255,NULL,255) # hex #cec108ff yellow
+  c3.3<- rgb(3,38,178,255,NULL,255) #hex #0326b2ff blue
+  c3.4<- rgb(97,18,104,255,NULL,255) #hex #611268 purple
+  c3.5<- rgb(1,137,3,255,NULL,255) #green
+  c3.6<- rgb(66,110,130,255,NULL,255) #hex #426e82 aqua
+  
+  c1 <- c(c1.0, c1.1, c1.2, c1.3, c1.4, c1.5, c1.6)
+  c2 <- c(c2.0, c2.1, c2.2, c2.3, c2.4, c2.5, c2.6)
+  c3 <- c(c3.0, c3.1, c3.2, c3.3, c3.4, c3.5, c3.6)
+  
+  return(list(c1, c2, c3))
+}
+mycolors <- fncColors4Quantiles()
+
+riparian.scenario.list <- c("riparian0", "riparian1", "riparian2", "riparian3") #Baseline, Full restoration, Degradation, Partial restoration
+climate.scenario.list <- c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
+ssn <- SSN::importSSN(paste0("data.in/sno.rbm.ssn"), predpts = 'preds')
+
+
+#--- Gather data from scenarios to be compared
+#  -- For IBM output figures ----
+scenario.list <- climate.scenario.list
+
+for(riparian.scenario in riparian.scenario.list){
+  
+# Gather historical climate scenario data
+time.period  <- "historical"
+for(scenario in scenario.list){
+  scenario.data <- NULL
+  years <- 1995:2005
+  for(yy in years){
+    outdir <- paste0(scenario, ".A.", yy)
+    load(file = paste0(data.out, "_", riparian.scenario, "/", outdir, "/salmon.finalstep.", yy, ".1.RData"))
+    scenario.data = rbind(scenario.data, salmon.finalstep)
+  }
+  scenario.data = as.data.frame(scenario.data)
+  scenario.data = cbind(scenario = scenario, scenario.data)
+  assign(paste0(scenario, ".data"), scenario.data); rm(scenario.data)
+  rm(salmon.finalstep)
+}
+
+# combine scenarios into one dataframe
+his.scenarios.data = NULL
+for(climate.scenario in climate.scenario.list){
+  sd = get(paste0(climate.scenario,".data"))
+  his.scenarios.data = rbind(his.scenarios.data, sd)
+  rm(sd)
+}
+
+his.scenarios.data$dateSc = his.scenarios.data$dateDi; his.scenarios.data$dateSc[his.scenarios.data$survive != -2] = NA
+his.scenarios.data$dateMo = his.scenarios.data$dateDi; his.scenarios.data$dateMo[his.scenarios.data$survive != 0] = NA
+
+# prep data for ggplot2
+his.scenarios.data <- his.scenarios.data %>% 
+  select(scenario, survive, weight, dateSp, dateEm, dateOm, dateSc, dateMo) %>% 
+  transmute(Scenario = as.factor(scenario),
+            FinalState = as.factor(survive),
+            Weight = as.numeric(weight),
+            DateSpawn = lubridate::date(lubridate::as_datetime(dateSp, origin = "1970-01-01")),
+            DateEmerge = lubridate::date(lubridate::as_datetime(dateEm, origin = "1970-01-01")),
+            DateOutmigrate = lubridate::date(lubridate::as_datetime(dateOm, origin = "1970-01-01")),
+            DateScour = lubridate::date(lubridate::as_datetime(dateSc, origin = "1970-01-01")),
+            DateMort = lubridate::date(lubridate::as_datetime(dateMo, origin = "1970-01-01")))
+levels(his.scenarios.data$FinalState) <- c("Scoured", "Stochastic", "Yearling", "Subyearling")
+his.scenarios.data$YearSpawn <- lubridate::year(his.scenarios.data$DateSpawn)
+
+# Save
+assign(paste0(riparian.scenario, ".", time.period ), his.scenarios.data)
+rm(his.scenarios.data, `bcc-csm1-1-m.data`, CanESM2.data, CCSM4.data, `CNRM-CM5.data`, `CSIRO-Mk3-6-0.data`, `HadGEM2-CC365.data`, `HadGEM2-ES365.data`, `IPSL-CM5A-MR.data`, MIROC5.data, `NorESM1-M.data`)
+thedata <- get(paste0(riparian.scenario, ".", time.period ))
+save(thedata, file = paste0("data.out/", riparian.scenario, ".", time.period , ".RData"))
+rm(thedata)
+
+
+# Gather future climate scenario data
+time.period  <- "future"
+for(scenario in scenario.list){
+  scenario.data = NULL
+  years = 2089:2099
+  for(yy in years){
+    outdir <- paste0(scenario, ".A.", yy)
+    load(file = paste0(data.out, "_", riparian.scenario, "/", outdir, "/salmon.finalstep.", yy, ".1.RData"))
+    scenario.data = rbind(scenario.data, salmon.finalstep)
+  }
+  scenario.data = as.data.frame(scenario.data)
+  scenario.data = cbind(scenario = scenario, scenario.data)
+  assign(paste0(scenario, ".data"), scenario.data); rm(scenario.data)
+  rm(salmon.finalstep)
+}
+
+# combine scenarios into one dataframe
+fut.scenarios.data = NULL
+for(scenario in scenario.list){
+  sd = get(paste0(scenario,".data"))
+  fut.scenarios.data = rbind(fut.scenarios.data, sd)
+  rm(sd)
+}
+fut.scenarios.data$dateSc = fut.scenarios.data$dateDi; fut.scenarios.data$dateSc[fut.scenarios.data$survive != -2] = NA
+fut.scenarios.data$dateMo = fut.scenarios.data$dateDi; fut.scenarios.data$dateMo[fut.scenarios.data$survive != 0] = NA
+
+# prep data for ggplot2
+fut.scenarios.data <- fut.scenarios.data %>% 
+  select(scenario, survive, weight, dateSp, dateEm, dateOm, dateSc, dateMo) %>% 
+  transmute(Scenario = as.factor(scenario),
+            FinalState = as.factor(survive),
+            Weight = as.numeric(weight),
+            DateSpawn = lubridate::date(lubridate::as_datetime(dateSp, origin = "1970-01-01")),
+            DateEmerge = lubridate::date(lubridate::as_datetime(dateEm, origin = "1970-01-01")),
+            DateOutmigrate = lubridate::date(lubridate::as_datetime(dateOm, origin = "1970-01-01")),
+            DateScour = lubridate::date(lubridate::as_datetime(dateSc, origin = "1970-01-01")),
+            DateMort = lubridate::date(lubridate::as_datetime(dateMo, origin = "1970-01-01")))
+levels(fut.scenarios.data$FinalState) <- c("Scoured", "Stochastic", "Yearling", "Subyearling")
+fut.scenarios.data$YearSpawn <- lubridate::year(fut.scenarios.data$DateSpawn)
+
+# Save
+assign(paste0(riparian.scenario, ".", time.period ), fut.scenarios.data)
+rm(fut.scenarios.data, `bcc-csm1-1-m.data`, CanESM2.data, CCSM4.data, `CNRM-CM5.data`, `CSIRO-Mk3-6-0.data`, `HadGEM2-CC365.data`, `HadGEM2-ES365.data`, `IPSL-CM5A-MR.data`, MIROC5.data, `NorESM1-M.data`)
+thedata <- get(paste0(riparian.scenario, ".", time.period ))
+save(thedata, file = paste0("data.out/", riparian.scenario, ".", time.period , ".RData"))
+rm(thedata)
+}
+
+# for Yearling growth plot:
+for(time.period in c("historical", "future")){
+  scenarios.data <- NULL
+  for(scenario in climate.scenario.list){
+    scenario.data <- NULL
+    if(time.period == "historical") years <- 1995:2005
+    if(time.period == "historical") years <- 2089:2099
+    
+    for(yy in years){
+      outdir <- paste0(scenario, ".A.", yy)
+      load(file = paste0(data.out,"_riparian0/", outdir, "/salmon.array.", yy, ".1.RData"))
+      
+      # Post-emergence filter
+      emgd <- salmon.array[,"emrg",]
+      emgd[emgd != 1] <- NA
+      
+      # Potential yearling survival filter
+      srv.age1 <- salmon.array[,"survive", dim(salmon.array)[3]]
+      srv.age1[srv.age1 != 1] <- NA
+      s.age1 <- array(srv.age1, dim = c(dim(salmon.array)[1], dim(salmon.array)[3]))
+      
+      # Get growth for potential yearlings only once emerged and only for fish that survived to the end
+      dat <- salmon.array[,"growth",] * s.age1 * emgd
+      dat <- dat[,seq(2, dim(salmon.array)[3], 2)] + dat[,seq(1, dim(salmon.array)[3], 2)]
+      
+      # Take mean of growth across these fish
+      dat <- apply(dat, 2, mean, na.rm = T) 
+      
+      # Remove leap year's extra day:
+      if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
+        dat <- dat[-60]
+      }
+      scenario.data <- cbind(scenario.data, dat)
+    }
+    scenario.data[is.nan(scenario.data)] <- NA
+    scenarios.data <- abind::abind(scenarios.data, scenario.data, along = 3)
+  }
+  assign(paste0("growth.", time.period), scenarios.data)
+  save(scenarios.data, file = paste0("data.out/growth.", time.period, ".RData"))
+}
+
+#  -- For DHSVM-RBM figures (warning: takes a long time!) ----
+
+# Load data for Figure 5:
+# Compute seasonal medians of flow & water temperature (historical and future climate, baseline riparian)
+for(time.period  in c("historical", "future")){
+  riparian.scenario <- "riparian0"; suffix <- ""
+  climate.scenario <- climate.scenario.list[1]
+  
+  # FLOW
+  # Import and collect all raw data
+  Q.df <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Outflow.Only.", time.period , suffix, ".csv"))
+  for(climate.scenario in climate.scenario.list[2:length(climate.scenario.list)]){
+    Qq <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Outflow.Only.", time.period , suffix, ".csv"))
+    Q.df <- rbind(Q.df, Qq)  
+  }
+  
+  # Get dates into consistent year
+  if(time.period  == "historical") {idx <- which(Q.df[,"Date"] < as.Date("1994-10-01") | Q.df[,"Date"] > as.Date("2005-09-30")); years <- 1995:2005}
+  if(time.period  == "future") {idx <- which(Q.df[,"Date"] < as.Date("2089-10-01") | Q.df[,"Date"] > as.Date("2099-09-30")); years <- 2089:2099}
+  Q.df <- Q.df[-idx,]; Q.df<- Q.df[!is.na(Q.df$Date),]
+  Q.df$Year <- lubridate::year(Q.df$Date)
+  for(yy in years){
+    foo <- Q.df[Q.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(Q.df[, "Date"]),]
+    lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+    lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+    Q.df[Q.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(Q.df[, "Date"]),] <- foo
+  }
+  
+  # Add season column & summarize by season 
+  Q.df$Season <- NA
+  Q.df$Season[Q.df$Date >= as.Date("1900-10-01") & Q.df$Date <= as.Date("1900-11-30") | Q.df$Date >= as.Date("1901-09-01")] <- "fall"
+  Q.df$Season[Q.df$Date >= as.Date("1900-12-01") & Q.df$Date <= as.Date("1901-02-28")] <- "winter"
+  Q.df$Season[Q.df$Date >= as.Date("1901-03-01") & Q.df$Date <= as.Date("1901-05-31")] <- "spring"
+  Q.df$Season[Q.df$Date >= as.Date("1901-06-01") & Q.df$Date <= as.Date("1901-08-31")] <- "summer"
+  
+  Q.seasons <- Q.df %>% 
+    group_by(Season) %>%
+    summarise_if(is.numeric, median, na.rm = TRUE) #older dplyr
+  #summarise(across(where(is.numeric), median, na.rm = TRUE)) #newer dplyr
+  Q.seasons <- Q.seasons[!is.na(Q.seasons$Season), -2] #remove NAs and Time column
+  write.csv(Q.seasons, file = paste0("data.in/rbm.data/Q.seasonal.medians.", time.period , ".csv"))
+  rm(Q.df, Qq, foo)
+  
+  assign(paste0("Q.seasons.", time.period ), Q.seasons); rm(Q.seasons)
+  
+  # TEMPERATURE
+  # Import and collect all raw data
+  T.df <- fncImportWT(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))
+  for(climate.scenario in climate.scenario.list[2:length(climate.scenario.list)]){
+    Tt <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))
+    T.df <- rbind(T.df, Tt)  
+  }
+  
+  # Get dates into consistent year
+  if(time.period  == "historical") {idx <- which(T.df[,"Date"] < as.Date("1994-10-01") | T.df[,"Date"] > as.Date("2005-09-30")); years <- 1995:2005}
+  if(time.period  == "future") {idx <- which(T.df[,"Date"] < as.Date("2089-10-01") | T.df[,"Date"] > as.Date("2099-09-30")); years <- 2089:2099}
+  T.df <- T.df[-idx,]; T.df<- T.df[!is.na(T.df$Date),]
+  T.df$Year <- lubridate::year(T.df$Date)
+  for(yy in years){
+    foo <- T.df[T.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(T.df[, "Date"]),]
+    lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+    lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+    T.df[T.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(T.df[, "Date"]),] <- foo
+  }
+  
+  # Add season column & summarize by season 
+  T.df$Season <- NA
+  T.df$Season[T.df$Date >= as.Date("1900-10-01") & T.df$Date <= as.Date("1900-11-30") | T.df$Date >= as.Date("1901-09-01")] <- "fall"
+  T.df$Season[T.df$Date >= as.Date("1900-12-01") & T.df$Date <= as.Date("1901-02-28")] <- "winter"
+  T.df$Season[T.df$Date >= as.Date("1901-03-01") & T.df$Date <= as.Date("1901-05-31")] <- "spring"
+  T.df$Season[T.df$Date >= as.Date("1901-06-01") & T.df$Date <= as.Date("1901-08-31")] <- "summer"
+  
+  T.seasons <- T.df %>% 
+    group_by(Season) %>%
+    summarise_if(is.numeric, median, na.rm = TRUE) #older dplyr
+  #summarise(across(where(is.numeric), median, na.rm = TRUE)) #newer dplyr
+  T.seasons <- T.seasons[!is.na(T.seasons$Season), -2] #remove NAs and Time column
+  write.csv(T.seasons, file = paste0("data.in/rbm.data/T.seasonal.medians.", time.period , ".csv"))
+  rm(T.df, Tt, foo)
+  
+  assign(paste0("T.seasons.", time.period ), T.seasons); rm(T.seasons)
+}
+
+# Load data for Figure 6:
+# Gather data for lowest mainstem reach across all years and GCMs for each riparian scenario
+for(time.period  in c("historical", "future")){
+  for(riparian.scenario in riparian.scenario.list){
+    
+    suffix <- paste0("_s", substr(riparian.scenario,9,9))
+    if(riparian.scenario == "riparian0") suffix <- ""
+    
+    Q.df <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Outflow.Only.", time.period , suffix, ".csv"))[, 1:3]
+    T.df <- fncImportWT(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))[, 1:3]
+    
+    for(climate.scenario in climate.scenario.list[2:length(climate.scenario.list)]){
+      Qq <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Outflow.Only.", time.period , suffix, ".csv"))[,3]
+      Tt <- fncImportWT(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))[,3]
+      Q.df <- cbind(Q.df, Qq)
+      T.df <- cbind(T.df, Tt)
+    }
+    colnames(Q.df) <- c("Date", "Time", climate.scenario.list)
+    colnames(T.df) <- c("Date", "Time", climate.scenario.list)
+    if(time.period  == "historical"){
+      Q.df <- Q.df[Q.df$Date >= as.Date("1994-10-01"),]
+      T.df <- T.df[T.df$Date >= as.Date("1994-10-01"),]
+    } else if(time.period  == "future"){
+      Q.df <- Q.df[Q.df$Date >= as.Date("2088-10-01"),]
+      T.df <- T.df[T.df$Date >= as.Date("2088-10-01"),]
+    }
+    assign(paste0(riparian.scenario, ".", time.period , ".Q"), Q.df)
+    assign(paste0(riparian.scenario, ".", time.period , ".T"), T.df)
+    write.csv(Q.df, paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".Q.csv"), row.names = F)
+    write.csv(T.df, paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".T.csv"), row.names = F)
+  }
+}
+
+
+#--- Re-load processed data & continue data setup for figures (skip gather data step if previously done) -----
+
+# IBM data:
+
+load("data.out/growth.historical.RData")
+load("data.out/growth.future.RData")
+
+for(riparian.scenario in c("riparian0", "riparian1", "riparian2", "riparian3")){
+  for(time.period  in c("historical", "future")){
+    load(paste0("data.out/", riparian.scenario, ".", time.period , ".RData"))
+    assign(paste0(riparian.scenario, ".", time.period ), thedata); rm(thedata)
+  }
+}
+
+# Create container to hold results
+container <- matrix(NA, nrow = 8, ncol = 9)
+container <- as.data.frame(container)
+colnames(container) <- c("Period", "Riparian", "ScenNo", "SY_Survival", "Y_Survival", "DateEmerge", "DateOutmigrate", "SY_Mass", "Y_Mass")
+scenario.names <- c("Baseline", "FullRestoration", "PartialRestoration", "Degradation")
+scenario.numbers <- c(0, 1, 3, 2)
+container$Riparian <- rep(scenario.names, 2)
+container$ScenNo <- rep(scenario.numbers, 2)
+container$Period <- c(rep("historical", 4), rep("future", 4))
+container$DateEmerge <- as.POSIXct(container$DateEmerge)
+container$DateOutmigrate <- as.POSIXct(container$DateOutmigrate)
+
+
+#Get numbers of spawners, yearlings, & subyearlings across scenarios
+for(riparian.scenario in riparian.scenario.list){
+  his.scenarios.data <- get(paste0(riparian.scenario, ".historical"))
+  fut.scenarios.data <- get(paste0(riparian.scenario, ".future"))
+  
+  #historical
+  spawners.by.scenario_year.h <- table(his.scenarios.data$YearSpawn, his.scenarios.data$Scenario)
+  spawners.h <- apply(spawners.by.scenario_year.h, 2, sum)
+  juveniles.by.scenario.h <- round(table(his.scenarios.data$FinalState, his.scenarios.data$Scenario)[3:4,]/ spawners.h * mean(spawners.h) / 11)
+  
+  #future
+  spawners.by.scenario_year.f <- table(fut.scenarios.data$YearSpawn, fut.scenarios.data$Scenario)
+  spawners.f <- apply(spawners.by.scenario_year.f, 2, sum)
+  juveniles.by.scenario.f <- round(table(fut.scenarios.data$FinalState, fut.scenarios.data$Scenario)[3:4,] / spawners.f * mean(spawners.f) / 11)
+  
+  # Combine all data into one frame
+  his.scenarios.data$Period <- "historical"
+  fut.scenarios.data$Period <- "future"
+  scenarios.data <- rbind(his.scenarios.data, fut.scenarios.data)
+  scenarios.data$Period <- as.factor(scenarios.data$Period)
+  levels(scenarios.data$Period) <- c("future", "historical")
+  assign(paste0(riparian.scenario, ".scenarios.data"), scenarios.data)
+  rm(his.scenarios.data, fut.scenarios.data)
+}
+
+# DHSVM-RBM data:
+# Figure 5 maps
+for(time.period  in c("historical", "future")){
+  foo <- read.csv(paste0("data.in/rbm.data/T.seasonal.medians.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  assign(paste0("T.seasons.", time.period ), foo); rm(foo)
+  foo <- read.csv(paste0("data.in/rbm.data/Q.seasonal.medians.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  assign(paste0("Q.seasons.", time.period ), foo); rm(foo)
+}
+
+# Figure 6 time series
+for(riparian.scenario in riparian.scenario.list){
+  for(time.period  in c("historical", "future")){
+    Qdat <- read.csv(paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".Q.csv"), header = T, stringsAsFactors = F)
+    Qdat$Date = as.Date(Qdat$Date)
+    assign(paste0(riparian.scenario, ".", time.period , ".Q"), Qdat)
+    Tdat <- read.csv(paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".T.csv"), header = T, stringsAsFactors = F)
+    Tdat$Date = as.Date(Tdat$Date)
+    assign(paste0(riparian.scenario, ".", time.period , ".T"), Tdat)
+    rm(Qdat, Tdat)
+  }
+}
+
+#--- Table 1: SUMMARY ACROSS SCENARIOS ---------------------
+
+# Prep data
+# get quantiles that pool across 10 GCMs and 11 years (but year is standardized to 1901)
+for(riparian.scenario in riparian.scenario.list){
+  td <- get(paste0(riparian.scenario, ".scenarios.data"))
+  td$YearSpawn = lubridate::year(td$DateSpawn)
+  td$YearEmerge = lubridate::year(td$DateEmerge)
+  td$YearOutmigrate = lubridate::year(td$DateOutmigrate)
+  for(var in c("Spawn", "Emerge", "Outmigrate")){
+    for(yy in c(1995:2005, 2089:2099)){
+      foo = td[td[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & td[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(td[, paste0("Date", var)]),]
+      lubridate::year(foo[foo[, paste0("Year", var)] == yy - 1, paste0("Date", var)]) <- 1900
+      lubridate::year(foo[foo[, paste0("Year", var)] == yy, paste0("Date", var)]) <- 1901
+      td[td[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & td[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(td[, paste0("Date", var)]),] <- foo
+    }
+  }
+  
+  # Date emerged or smolted
+  for(time.period  in c("historical", "future")){
+    for(var in c("DateEmerge", "DateOutmigrate")){
+      result <- td %>% 
+      mutate(PhenObj = eval(parse(text = var))) %>% 
+      # filter data to surviving fish
+      filter(FinalState == "Subyearling" | FinalState == "Yearling") %>% 
+      # filter to correct time.period 
+      filter(Period == !!(time.period)) %>%
+      # select relevant columns
+      select(Scenario, PhenObj) %>% 
+      # filter data to fish that experienced each event
+      filter(!is.na(PhenObj)) 
+      
+      result$Date <- as.POSIXct(result$PhenObj)
+      thestatistic <- quantile(result$Date, probs = c(0.05, 0.5, 0.95), na.rm = T)
+      print(thestatistic)
+      container[container$Period == time.period  & container$ScenNo == as.numeric(substr(riparian.scenario, 9, 9)), var] <- thestatistic["50%"]
+    }
+  }
+  
+  # Final mass subyearling or yearling
+  for(time.period  in c("historical", "future")){
+    for(var in c("Subyearling", "Yearling")){
+      result <- td %>% 
+        # filter data to surviving fish
+        filter(FinalState == !!(var)) %>% 
+        # filter to correct time.period 
+        filter(Period == !!(time.period)) %>%
+        # select relevant columns
+        select(Scenario, Weight)
+      
+        thestatistic <- quantile(result$Weight, probs = c(0.05, 0.5, 0.95))
+        print(thestatistic)
+        ifelse(substr(var, 1, 1) == "S", column <- "SY_Mass", column <- "Y_Mass")
+        container[container$Period == time.period  & container$ScenNo == as.numeric(substr(riparian.scenario, 9, 9)), column] <- thestatistic["50%"]
+    }
+  }
+  
+  # No. subyearlings or yearlings
+  for(time.period  in c("historical", "future")){
+    for(var in c("Subyearling", "Yearling")){
+      result <- td %>% 
+        # filter data to surviving fish
+        filter(FinalState == !!(var)) %>% 
+        # filter to correct time.period 
+        filter(Period == !!(time.period)) %>%
+        # select relevant columns
+        select(Scenario, FinalState, YearSpawn)
+      totals <- td %>% 
+        # filter to correct time.period 
+        filter(Period == !!(time.period)) %>%
+        # select relevant columns
+        select(Scenario, FinalState, YearSpawn)
+      
+      result <- tapply(result$FinalState, list(result$YearSpawn, result$Scenario), length)
+      totals <- tapply(totals$FinalState, list(totals$YearSpawn, totals$Scenario), length)
+      #quantile(result, probs = c(0.05, 0.5, 0.95), na.rm = T)
+      survival <- result / totals
+      thestatistic <- quantile(survival, probs = c(0.05, 0.5, 0.95), na.rm = T)
+      print(thestatistic)
+      ifelse(substr(var, 1, 1) == "S", column <- "SY_Survival", column <- "Y_Survival")
+      container[container$Period == time.period  & container$ScenNo == as.numeric(substr(riparian.scenario, 9, 9)), column] <- thestatistic["50%"]
+    }
+  }
+  rm(result, totals, thestatistic)
+}
+container
+write.csv(container, "data.out/Table1.csv", row.names = F)
+
+#--- Figure 5: DHSVM-RBM Flow & Water temperature maps -----
+
+# Read in basin outline & streams
+basin <- read_sf(paste0("data.in/shapefiles"), "Basin_snq2")
+# dissolve on area to just get the outline
+basin2 <- basin %>% summarise(area = sum(AreaSqKm))
+streams <- read_sf(paste0("data.in/", ssn.folder), "edges")
+
+# Set extent for plotting (will be updated later once ssn is loaded)
+ex <- raster::extent(basin2)
+
+# Change (future minus historical for T and future/historical ration for Q)
+Q.seasons <- Q.seasons.future[2:ncol(Q.seasons.future)] - Q.seasons.historical[2:ncol(Q.seasons.historical)]
+rownames(Q.seasons) <- Q.seasons.historical$Season
+T.seasons <- T.seasons.future[2:ncol(T.seasons.future)] - T.seasons.historical[2:ncol(T.seasons.historical)]
+rownames(T.seasons) <- T.seasons.historical$Season
+Q.seasons <- Q.seasons[,-ncol(Q.seasons)]; T.seasons <- T.seasons[,-ncol(T.seasons)] #remove Year column
+
+T.seasons <- T.seasons[c(1,4,2,3),] #reorder seasons for plotting
+Q.seasons <- Q.seasons[c(1,4,2,3),] #reorder seasons for plotting
+
+# water temperature
+cb <- RColorBrewer::brewer.pal(9, "Reds")
+theseq <- quantile(t(T.seasons), probs = c(0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1))
+left <- theseq[1:8]
+rght <- theseq[2:9]
+
+#flow
+cb2 <- RColorBrewer::brewer.pal(9, "RdBu")
+theseq2 <- quantile(t(Q.seasons), probs = c(0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1))
+left2 <- theseq2[1:8]
+rght2 <- theseq2[2:9]
+
+# Make maps
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Maps.png"), width = 7.5, height = 14, units = "in", res = 300)
+par(mfrow = c(5, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+
+seasons <- c("Fall", "Winter", "Spring", "Summer", "Blank")
+Qletters <- c("(a)", "(b)", "(c)", "(d)")
+Tletters <- c("(e)", "(f)", "(g)", "(h)")
+
+for(ss in 1:length(seasons)){
+  season <- seasons[ss]
+  
+  for(var in c("Flow", "Temperature")){
+    if(var == "Flow") letter <- Qletters[ss]
+    if(var == "Temperature") letter <- Tletters[ss]
+    
+    if(ss != 5){
+      
+      # plot background
+      plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
+      #plot(streams[,"afvArea"], col = 1, lwd = afvArea, type = 'l', add = TRUE)
+      
+      if(var == "Flow"){
+        # Flow:
+        if("Q" %in% colnames(ssn@data)){ssn = fncUnloadWQ("Q",ssn)} # unload if it's already loaded
+        dat <- cbind("rid" = colnames(Q.seasons), "Q" = t(Q.seasons[ss,]))
+        dat[,"rid"] <- as.numeric(gsub("X", "", dat[,"rid"])); colnames(dat)[2] <- "Q"
+        ssn@data <- merge(ssn@data, dat, by.x = "rid", by.y = "rid", all.x = T)
+        ssn@data$Q <- as.numeric(ssn@data$Q) #just in case, sometimes they show up as characters
+        
+        for(n in 1:length(cb2)) {ssn@data$Q.color[ssn@data$Q >= left2[n] & ssn@data$Q <= rght2[n]]= n}
+        
+        for (i in 1:length(ssn@lines)) {
+          for (j in 1:length(ssn@lines[[i]])) {
+            lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb2[ssn@data[i,"Q.color"]], lwd = 8 * (ssn@data[i, "afvArea"] + 0.1))
+          }
+        }
+      }
+      
+      if(var == "Temperature"){
+        # Water temperature
+        if("WT" %in% colnames(ssn@data)){ssn = fncUnloadWQ("WT",ssn)} # unload if it's already loaded
+        dat <- cbind("rid" = colnames(T.seasons), "WT" = t(T.seasons[ss,]))
+        dat[,"rid"] <- as.numeric(gsub("X", "", dat[,"rid"])); colnames(dat)[2] <- "WT"
+        ssn@data <- merge(ssn@data, dat, by.x = "rid", by.y = "rid", all.x = T)
+        ssn@data$WT <- as.numeric(ssn@data$WT) #just in case, sometimes they show up as characters
+        
+        for(n in 1:length(cb)) {ssn@data$WT.color[ssn@data$WT >= left[n] & ssn@data$WT <= rght[n]]= n}
+        
+        for (i in 1:length(ssn@lines)) {
+          for (j in 1:length(ssn@lines[[i]])) {
+            lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb[ssn@data[i,"WT.color"]], lwd = 8 * (ssn@data[i, "afvArea"] + 0.1))
+          }
+        }
+      }
+      text(x = ex[1] + 5000, y = ex[3] + 3500, paste(letter, season), cex = 1.5)
+    }
+    
+    if(ss == 5){
+      # Add flow legend
+      if(var == "Flow"){
+        plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
+        leglabs = paste(round(left2, 2), "to", round(rght2, 2))
+        legend("center", legend = leglabs, title = expression(Delta~"Flow (m s"^-1*")"), bty = "n", pch = 19, col = cb2, cex = 1.5)
+      }
+      # Add temperature legend
+      if(var == "Temperature"){
+        plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
+        leglabs = paste(round(left, 1), "to", round(rght , 1))
+        legend("center", legend = leglabs, title = expression(Delta~"Water temperature ("*degree*C*")"), bty = "n", pch = 19, col = cb, cex = 1.5)
+      }
+    }
+  }
+}
+
+dev.off()
+
+#--- Figure 6: DHSVM-RBM Change in flow and temperature time series -----
+# Get all data into same year for plotting
+# change year so that day-month is the comparable across scenarios.
+for(riparian.scenario in riparian.scenario.list){
+  for(time.period  in c("historical", "future")){
+    if(time.period  == "historical") theyears <- 1995:2005
+    if(time.period  == "future") theyears <- 2089:2099
+    Q.data <- get(paste0(riparian.scenario, ".", time.period , ".Q"))
+    T.data <- get(paste0(riparian.scenario, ".", time.period , ".T"))
+    Q.data$Year = lubridate::year(Q.data$Date)
+    T.data$Year = lubridate::year(T.data$Date)
+    
+    for(yy in theyears){
+      
+      # Remove leap year's extra day:
+      if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
+        idx <- which(Q.data$Date == as.Date(paste0(yy, "-02-29")))
+        Q.data <- Q.data[-idx,]
+        T.data <- T.data[-idx,]
+        rm(idx)
+      }
+      
+      #Flow
+      foo = Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),]
+      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+      Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),] <- foo
+      #Temp
+      foo = T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),]
+      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+      T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),] <- foo
+    }
+    
+    # remove extra erroneous records
+    idx <- which(Q.data$Date > as.Date("1901-09-30"))
+    if(length(idx) > 0) {Q.data <- Q.data[-idx,]; rm(idx)}
+    idx <- which(T.data$Date > as.Date("1901-09-30"))
+    if(length(idx) > 0) {T.data <- T.data[-idx,]; rm(idx)}
+    
+    
+    assign(paste0(riparian.scenario, ".", time.period , ".Qdat"), Q.data)
+    assign(paste0(riparian.scenario, ".", time.period , ".Tdat"), T.data)
+  }
+}
+
+
+png(paste0(plot.directory,"/Figure6_QT_annual_change.png"), width = 5.5, height = 9, units = "in", res = 300)
+par(las = 1, mfrow = c(5,1), mar = c(2.5,4.5,0,0.5), oma = rep(0.5,4))
+
+# Top row Riparian baseline future minus historical
+# Flow
+Qdat.h <- riparian0.historical.Qdat
+Qdat.f <- riparian0.future.Qdat
+Qdat <- Qdat.f - Qdat.h; Qdat <- Qdat[-c(1,2,ncol(Qdat))]; Qdat$Date <- Qdat.h$Date
+themin <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
+themin <- apply(themin[,2:11], 1, mean)
+themedian <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
+themedian <- apply(themedian[,2:11], 1, mean)
+themax <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
+themax <- apply(themax[,2:11], 1, mean)
+xvals <- c(unique(Qdat.h$Date), rev(unique(Qdat.h$Date)))
+
+plot(unique(Qdat.h$Date), themedian, type = 'n', ylab = expression(Delta~"Flow (m s"^-1*")"), xlab = "", ylim = c(-600, 1200), xaxt = 'n', cex.lab = 1.3)
+axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
+polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][7])
+lines(unique(Qdat.h$Date), themedian, col = mycolors[[3]][7])
+abline(h = 1, lty = 3, col = "darkgray")
+legend("topleft", legend = "(a) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
+
+# Temperature
+Tdat.h <- riparian0.historical.Tdat
+Tdat.f <- riparian0.future.Tdat
+Tdat <- Tdat.f - Tdat.h; Tdat <- Tdat[-c(1,2,ncol(Tdat))]; Tdat$Date <- Tdat.h$Date
+themin <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
+themin <- apply(themin[,2:11], 1, mean)
+themedian <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
+themedian <- apply(themedian[,2:11], 1, mean)
+themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
+themax <- apply(themax[,2:11], 1, mean)
+xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
+
+plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = expression(Delta~"Temperature ("*degree*C*")"), xlab = "", ylim = c(-5, 15), xaxt = 'n', cex.lab = 1.3)
+axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
+polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][5])
+lines(unique(Tdat.h$Date), themedian, col = mycolors[[3]][5])
+abline(h = 1, lty = 3, col = "darkgray")
+legend("topleft", legend = "(b) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
+
+# Next 3 rows: Riparian scenario future X minus riparian baseline scenario future
+for(riparian.scenario in riparian.scenario.list[c(2,4,3)]){
+  
+  # Temperature
+  Tdat.0 <- riparian0.future.Tdat
+  Tdat.x <- get(paste0(riparian.scenario, ".future.Tdat"))
+  Tdat <- Tdat.x - Tdat.0; Tdat <- Tdat[-c(1,2,ncol(Tdat))]; Tdat$Date <- Tdat.0$Date
+  themin <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
+  themin <- apply(themin[,2:11], 1, mean)
+  themedian <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
+  themedian <- apply(themedian[,2:11], 1, mean)
+  themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
+  themax <- apply(themax[,2:11], 1, mean)
+  xvals <- c(unique(Tdat.0$Date), rev(unique(Tdat.0$Date)))
+  
+  if(riparian.scenario == riparian.scenario.list[3]) plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = expression(Delta~"Temperature ("*degree*C*")"), xlab = "", ylim = c(-1.25, 1.25), cex.lab = 1.3)
+  else{
+    plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = expression(Delta~"Temperature ("*degree*C*")"), xlab = "", ylim = c(-1.25, 1.25), xaxt = 'n', cex.lab = 1.3)
+    axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
+  }
+  polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][5])
+  lines(unique(Tdat.0$Date), themedian, col = mycolors[[3]][5])
+  abline(h = 0, lty = 3, col = "darkgray")
+  lg <- c("(c) Full restoration effect, future climate", "(e) Riparian degradation effect, future climate", "(d) Partial restoration effect, future climate")[as.numeric(substr(riparian.scenario, 9, 9))]
+  legend("topleft", legend = lg, bty = 'n', cex = 1.4)
+  
+}
+
+dev.off()
+
+#--- Figure 7: PHENOLOGY -----------------------------------------------------------------
+
+# change year so that day-month is the comparable across scenarios.
+phenology.data <- scenarios.data
+phenology.data$YearSpawn = lubridate::year(phenology.data$DateSpawn)
+phenology.data$YearEmerge = lubridate::year(phenology.data$DateEmerge)
+phenology.data$YearOutmigrate = lubridate::year(phenology.data$DateOutmigrate)
+
+for(var in c("Spawn", "Emerge", "Outmigrate")){
+  for(yy in c(1995:2005, 2089:2099)){
+  #for(yy in years){
+    foo = phenology.data[phenology.data[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & phenology.data[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(phenology.data[, paste0("Date", var)]),]
+    lubridate::year(foo[foo[, paste0("Year", var)] == yy - 1, paste0("Date", var)]) <- 1900
+    lubridate::year(foo[foo[, paste0("Year", var)] == yy, paste0("Date", var)]) <- 1901
+    phenology.data[phenology.data[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & phenology.data[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(phenology.data[, paste0("Date", var)]),] <- foo
+  }
+}
+yy = 1901
+month.min = lubridate::month(min(phenology.data$DateEmerge, na.rm = T))
+
+# EMERGENCE / OUTMIGRATION TIMING
+for(var in c("DateEmerge", "DateOutmigrate")){
+  if(var == "DateEmerge"){nm <- "Emergence"; yl <- 125; xlb <- ""; ylb <- "Simulated\nSalmon\nEmerged\n(1000s)"}
+  if(var == "DateOutmigrate"){nm <- "Outmigration"; xlb <- "Date"; yl <- 60; ylb <- "Simulated\nSalmon\nOutmigrants\n(1000s)"}
+  
+plot.object <- phenology.data %>% 
+  mutate(PhenObj = eval(parse(text = var))) %>% 
+  # filter data to surviving fish
+  filter(FinalState == "Subyearling" | FinalState == "Yearling") %>% 
+  # select relevant columns
+  select(Scenario, Period, PhenObj) %>% 
+  # combine emergence into a single column
+  gather(key = "Event", value = "Date", PhenObj) %>% 
+  # filter data to fish that experienced each event
+  filter(!is.na(Date)) %>% 
+  # plot event vs. day-month
+  ggplot(aes(x = Date, fill = Period, color = Period)) + 
+  # add histogram
+  geom_histogram(alpha = 0.5, position = "identity", aes(y = (..count..)/11/10), binwidth = 5) +
+  # supply x and y limits
+  coord_cartesian(ylim = c(0, yl)) +
+  # set theme
+  theme_classic() +
+  # adjust y-axis label position
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+  # remove legend title
+  theme(legend.title = element_blank()) +
+  # remove bottom axis line and ticks
+  theme(axis.line.x.bottom = element_blank(), axis.ticks.x.bottom = element_blank()) +
+  # remove subplot label background
+  theme(strip.background = element_blank()) +
+  # manually set color
+  scale_color_manual(values=c("#FF8C00", "#00008B")) +
+  # manually set fill
+  scale_fill_manual(values=c("#FF8C00", "#00008B")) +
+  # set x-axis labels to day-month
+  scale_x_date(limits = c(as.Date(paste0(yy - 1, "-", month.min, "-01")), as.Date(paste0(yy, "-07-15"))), date_labels = "%b", date_breaks = "1 month") +
+  # adjust y-axis label text
+  labs(y = ylb, x = xlb) +
+  # add x-axis to each plot
+  geom_hline(yintercept = 0)
+assign(paste0(nm, ".plot.object"), plot.object)
+}
+
+#Combine plots for manuscript figure
+figure <- ggpubr::ggarrange(Emergence.plot.object, Outmigration.plot.object,
+                    labels = c("(a)", "(b)"), hjust = -6.5, vjust = 1.8, font.label = list(size = 12, face = "plain"),
+                    ncol = 1, nrow = 2, align = "hv")
+figure
+if (save.figures) {
+  ggsave(path = plot.directory, filename = paste0("Figure7_phenology_", riparian.scenario,".png"), plot = last_plot(), 
+         width = 6, height = 6, units = "in", dpi = 300)
+}
+
+
+#--- Figure 8: FINAL MASS ----------------------------------------------------------------
+
+# SUBYEARLING / YEARLING SIZES
+for(var in c("Subyearling", "Yearling")){
+  if(var == "Subyearling"){nm <- "Subyearling"; yl <- 165; xl <- 5; ylb <- "Simulated\nSubyearling\nSalmon\n(1000s)"; xlb <- ""; bw <- 0.08}
+  if(var == "Yearling"){nm <- "Yearling"; yl <- 15; xl<- 30; ylb <- "Simulated\nPotential\nYearlings\n(1000s)"; xlb <- "Fish mass (g)" ;bw<- 0.5}
+  
+  plot.object <- scenarios.data %>% 
+    # filter data to survivors
+    filter(FinalState == !!(var)) %>%
+    # plot weight
+    ggplot(aes(x = Weight, color = Period, fill = Period)) + 
+    # add histogram plot
+    geom_histogram(alpha = 0.5, aes(y = (..count..)/11/10), binwidth = bw) +
+    # supply x and y limits
+    coord_cartesian(xlim = c(0, xl), ylim = c(0, yl)) +
+    # set theme
+    theme_classic() +
+    # remove legend title
+    #theme(legend.position = "none") +
+    theme(legend.title = element_blank()) +
+    # remove bottom axis line and ticks
+    theme(axis.line.x.bottom = element_blank(), axis.ticks.x.bottom = element_blank()) +
+    # remove subplot label background
+    theme(strip.background = element_blank()) +
+    # adjust y-axis label position
+    theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+    # add axis and title text
+    labs(x = xlb, y = ylb) +
+    # manually set color
+    scale_color_manual(values=c("#FF8C00", "#00008B")) +
+    # manually set fill
+    scale_fill_manual(values=c("#FF8C00", "#00008B")) +
+    # add x-axis to each plot
+    geom_hline(yintercept = 0)
+  
+  assign(paste0(nm, ".plot.object"), plot.object)
+}
+
+#Combine plots for manuscript figure
+figure <- ggpubr::ggarrange(Subyearling.plot.object, Yearling.plot.object,
+                    labels = c("(a)", "(b)"), hjust = -6.5, vjust = 1.8, font.label = list(size = 12, face = "plain"),
+                    ncol = 1, nrow = 2, align = "hv")
+figure
+if (save.figures) {
+  ggsave(path = plot.directory, filename = paste0("Figure8_size_", riparian.scenario, ".png"), plot = last_plot(), 
+         width = 6, height = 6, units = "in", dpi = 300)
+}
+
+
+#--- Figure 9: YEARLING GROWTH -----
+png(paste0(plot.directory, "/Figure9_growth_over_time.png"), width = 7.5, height = 9, units = "in", res = 300)
+par(mfrow = c(2, 1), las = 1, mar = c(3,4.5,1,1), oma = rep(0.5, 4), cex = 1.1)
+
+for(timeperiod in c("historical", "future")){
+  td <- get(paste0("growth.", timeperiod))
+  dat <- apply(td, 1, quantile, probs = c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = T)
+  dat<- t(dat)
+  
+  # Set up date axis
+  first.date <- as.Date("1994-09-01") #starting date for simulation and for spawning
+  last.date <- as.Date("1995-08-31") #last date of the simulation
+  months <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+  minX <- trunc(which(dat[,3] > 0))[1]
+  val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+  val2 <- as.numeric(format(last.date, "%m"))
+  if(val1 >= 9 & val1 <= 12) months <- months[c(val1:length(months), 1:val2)]
+  if(val1 >= 1 & val1 <= 8) months <- months[val1:val2]
+  lng.out<- length(months)
+  maxX <- length(dat[,3])
+  
+  #ylm <- range(dat, na.rm = T); ylm[2] <- ylm[2] + 0.005
+  
+  if(timeperiod == "historical") {mycols <- c("#B0BFFC96", "#8099FCC8", "#0326B2FF"); leglab = "a"; ylm <- c(-0.007, 0.033)}
+  if(timeperiod == "future") {mycols <- c("#fcd99c96", "#eaad44c8", "#f49b02ff"); leglab = "b"; ylm <- c(-0.0263, 0.037)}
+  
+  plot(dat[,3], ylim = ylm, ylab = expression(paste("Growth (g g ",d^-1,")")), type = 'n', xaxt = 'n', xlab = "", xlim = c(minX, maxX), cex.axis = 1)
+  axis(1, at = seq(minX, maxX, length.out = lng.out), labels = months)
+  
+  #Min/Max
+  polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 1], rev(dat[minX: maxX, 5])), border = NA, col = mycols[1])
+  
+  #Q1/Q3
+  polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 2], rev(dat[minX: maxX, 4])), border = NA, col = mycols[2])
+  
+  #Median
+  lines(dat[,3], lwd = 2, col = mycols[3])
+  
+  abline(h = 0, lty = 3, col = "darkgray")
+  
+  legend("topleft", legend = paste0("(", leglab,")"), bty = 'n')
+}
+
+dev.off()
+
+
+#--- Figure 10: RIPARIAN COMPARISON -------------------------------------------------------
+
+base1 <- container[container$Period == "historical" & container$Riparian == "Baseline", 4:ncol(container)]
+base2 <- container[container$Period == "future" & container$Riparian == "Baseline", 4:ncol(container)]
+base1$DateEmerge <- base1$DateOutmigrate <- 365; base2$DateEmerge <- base2$DateOutmigrate <- 365
+row1 <- (container[container$Period == "future" & container$Riparian == "Baseline", 4:ncol(container)] - container[container$Period == "historical" & container$Riparian == "Baseline", 4:ncol(container)]) / base1
+row2 <- (container[container$Period == "future" & container$Riparian == "FullRestoration", 4:ncol(container)] - container[container$Period == "future" & container$Riparian == "Baseline", 4:ncol(container)]) / base2
+row3 <- (container[container$Period == "future" & container$Riparian == "PartialRestoration", 4:ncol(container)] - container[container$Period == "future" & container$Riparian == "Baseline", 4:ncol(container)]) / base2
+row4 <- (container[container$Period == "future" & container$Riparian == "Degradation", 4:ncol(container)] - container[container$Period == "future" & container$Riparian == "Baseline", 4:ncol(container)]) / base2
+balloon.data <- rbind(row1, row2, row3, row4)
+balloon.data$DateEmerge <- as.numeric(balloon.data$DateEmerge); balloon.data$DateOutmigrate <- as.numeric(balloon.data$DateOutmigrate)
+balloon.data
+row.names(balloon.data) <- c("Climate effect, Baseline riparian", "Full restoration effect, future climate", "Partial restoration effect, future climate", "Riparian degradation effect, future climate")
+colnames(balloon.data) <- c("Subyearling survival", "Yearling survival", "Date emerged", "Date outmigrated", "Subyearling mass", "Yearling mass")
+
+mycolrs <- sign(balloon.data)
+mycolrs[mycolrs == -1] <- "#c73926"
+mycolrs[mycolrs >=0] <- "#4fc3e3"
+mycolrs <- unlist(mycolrs)
+
+ggpubr::ggballoonplot(abs(balloon.data), fill = mycolrs, size.range = c(1, 20))
+
+if (save.figures) {
+  ggsave(path = plot.directory, filename = paste0("Figure10_scenario_comparison.png"), plot = last_plot(), 
+         width = 7.5, height = 3.5, units = "in", dpi = 300)  
+}
+
+
+#--- Figure S2: DHSVM-RBM Annual flow & water temperature time series ----
+# Plot time series of GCM ensemble medians and quantiles with transparent shading
+# Warning: slow processing time!
+
+png(plot.directory, "/FigureS2_QT_timeseries.png", width = 10, height = 7, units = "in", res = 300)
+par(mfrow = c(2,1), las = 1, mfrow = c(2,2), mar = c(3,4.5,3,1), oma = rep(0.5,4), cex = 1.1)
+
+for(time.period  in c("historical", "future")){
+  
+  if(time.period  == "historical"){col2use <- 4; labls <- c("(a)","(b)")}
+  if(time.period  == "future"){col2use <- 2; labls <- c("(c)","(d)")}
+  
+  # Temperature
+  Tdat <- get(paste0(riparian.scenario, ".", time.period , ".T"))
+  themedian <- apply(Tdat[3:ncol(Tdat)], 1, median)
+  themin <- apply(Tdat[3:ncol(Tdat)], 1, quantile, probs = 0.05)
+  themax <- apply(Tdat[3:ncol(Tdat)], 1, quantile, probs = 0.95)
+  xvals <- c(Tdat$Date, rev(Tdat$Date))
+  
+  plot(Tdat$Date, themedian, type = 'n', ylab = expression("Water temperature ("*degree*C*")"), xlab = "", ylim = c(0, 30))
+  polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][col2use])
+  lines(Tdat$Date, themedian, col = mycolors[[3]][col2use])
+  legend("topleft", legend = labls[1], bty = 'n')
+  
+  # Flow
+  Qdat <- get(paste0(riparian.scenario, ".", time.period , ".Q"))
+  themedian <- apply(Qdat[3:ncol(Qdat)], 1, median)
+  themin <- apply(Qdat[3:ncol(Qdat)], 1, quantile, probs = 0.05)
+  themax <- apply(Qdat[3:ncol(Qdat)], 1, quantile, probs = 0.95)
+  xvals <- c(Qdat$Date, rev(Qdat$Date))
+  
+  plot(Qdat$Date, themedian, type = 'n', ylab = expression("Flow (m s"^-1*")"), xlab = "", ylim = c(0,1200))
+  polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][col2use])
+  lines(Qdat$Date, themedian, col = mycolors[[3]][col2use])
+  legend("topleft", legend = labls[2], bty = 'n')
+}
+
+dev.off()
+
+#--- Figure S3: MORTALITY ----------------------------------------------------------------
+
+plot.object1 <- scenarios.data %>% 
+    # filter data to survivors
+    filter(FinalState == "Scoured" | FinalState == "Stochastic") %>%
+    # plot weight
+    ggplot(aes(x = Weight, color = FinalState, fill = FinalState)) + 
+    # add histogram plot
+    geom_histogram(alpha = 0.5, aes(y = (..count..)/11/10), binwidth = 0.05) +
+    # supply x and y limits
+    coord_cartesian(xlim = c(0.25, 1.5)) +
+    # set theme
+    theme_classic() +
+    # remove legend title
+    #theme(legend.position = "none") +
+    theme(legend.title = element_blank()) +
+    # remove bottom axis line and ticks
+    theme(axis.line.x.bottom = element_blank(), axis.ticks.x.bottom = element_blank()) +
+    # remove subplot label background
+    theme(strip.background = element_blank()) +
+    # adjust y-axis label position
+    theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+    # add axis and title text
+    labs(x = "Fish mass (g)", y = "Simulated\nSalmon\nMortalities\n(1000s)") +
+    # manually set color
+    scale_color_manual(values=c("#426e82", "#611268")) +
+    # manually set fill
+    scale_fill_manual(values=c("#426e82", "#611268")) +
+    # add x-axis to each plot
+    geom_hline(yintercept = 0)
+  
+
+# change year so that day-month is the comparable across scenarios.
+phenology.data <- scenarios.data
+phenology.data$YearScour = lubridate::year(phenology.data$DateScour)
+phenology.data$YearMort = lubridate::year(phenology.data$DateMort)
+
+for(var in c("Scour", "Mort")){
+  for(yy in c(1995:2005, 2089:2099)){
+    foo = phenology.data[phenology.data[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & phenology.data[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(phenology.data[, paste0("Date", var)]),]
+    lubridate::year(foo[foo[, paste0("Year", var)] == yy - 1, paste0("Date", var)]) <- 1900
+    lubridate::year(foo[foo[, paste0("Year", var)] == yy, paste0("Date", var)]) <- 1901
+    phenology.data[phenology.data[, paste0("Date", var)] >= as.Date(paste0(yy - 1, "-09-01")) & phenology.data[, paste0("Date", var)] < as.Date(paste0(yy, "-08-31")) & !is.na(phenology.data[, paste0("Date", var)]),] <- foo
+  }
+}
+yy = 1901
+month.min = lubridate::month(min(phenology.data$DateScour, na.rm = T))
+
+
+  plot.object2 <- phenology.data %>% 
+    mutate(Scoured = DateScour, Stochastic = DateMort) %>% 
+    # filter data mortalities
+    filter(FinalState == "Scoured" | FinalState == "Stochastic") %>% 
+    # select relevant columns
+    select(Scenario, Scoured, Stochastic) %>% 
+    # combine emergence and outmigration into a single column
+    gather(key = "Event", value = "Date", c(Scoured, Stochastic)) %>% 
+    # # filter data to fish that experienced each event
+    # filter(!is.na(Date)) %>% 
+    # plot event vs. day-month
+    ggplot(aes(x = Date, fill = Event, color = Event)) + 
+    # add histogram
+    geom_histogram(alpha = 0.5, position = "identity", aes(y = (..count..)/11/10), binwidth = 5) +
+    # supply x and y limits
+    #coord_cartesian(ylim = c(0, yl)) +
+    # set theme
+    theme_classic() +
+    # adjust y-axis label position
+    theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+    # remove legend title
+    theme(legend.title = element_blank()) +
+    # remove bottom axis line and ticks
+    theme(axis.line.x.bottom = element_blank(), axis.ticks.x.bottom = element_blank()) +
+    # remove subplot label background
+    theme(strip.background = element_blank()) +
+    # manually set color
+    scale_color_manual(values=c("#426e82", "#611268")) +
+    # manually set fill
+    scale_fill_manual(values=c("#426e82", "#611268")) +
+    # set x-axis labels to day-month
+    scale_x_date(limits = c(as.Date(paste0(yy - 1, "-", month.min, "-01")), as.Date(paste0(yy, "-07-15"))), date_labels = "%b", date_breaks = "1 month") +
+    # adjust y-axis label text
+    labs(y = "Simulated\nSalmon\nMortalities\n(1000s)") +
+    # add x-axis to each plot
+    geom_hline(yintercept = 0)
+
+  #Combine plots for manuscript figure
+  figure <- ggpubr::ggarrange(plot.object2, plot.object1,
+                      labels = c("(a)", "(b)"), hjust = -6.5, vjust = 1.8, font.label = list(size = 12, face = "plain"),
+                      ncol = 1, nrow = 2, align = "hv")
+  figure
+  if (save.figures) {
+    ggsave(path = plot.directory, filename = paste0("FigureS3_mortality_", riparian.scenario, ".png"), plot = last_plot(), 
+           width = 6, height = 6, units = "in", dpi = 300)
+  }
+  
+
+
+
+#--- Figure S4: FINAL STATE ---------------------------------------------------------------
+
+years <- 1995:2005 #2089:2099
+if(2000 %in% years){the.data <- riparian0.scenarios.data[riparian0.scenarios.data$Period == "historical",]; no_spawners = spawners.h; nm = "CChis"}
+if(2090 %in% years){the.data <- riparian0.scenarios.data[riparian0.scenarios.data$Period == "historical",]; no_spawners = spawners.f; nm = "CCfut"}
+
+# Final state barplot (historical or future)
+the.data %>% 
+  # filter data to surviving fish
+  filter(FinalState == "Subyearling" | FinalState == "Yearling") %>%
+  # plot final state vs. scenario
+  ggplot(aes(x = Scenario, color = FinalState, fill = FinalState)) + 
+  # add barplot
+  geom_bar(aes(y = (..count..)/c(no_spawners, no_spawners)*mean(no_spawners)/11), alpha = 0.5) +
+  # set theme
+  theme_classic() +
+  # remove legend title
+  theme(legend.title = element_blank()) +
+  # adjust y-axis label position
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+  # manually set color
+  scale_color_manual(values=c("#008000", "#808080")) +
+  # manually set fill
+  scale_fill_manual(values=c("#008000", "#808080")) +
+  # adjust y-axis label text
+  labs(y = "Simulated\nsalmon\n(1000s)")
+if (save.figures) {
+  ggsave(path = plot.directory, filename = paste0("FinalState.", nm, ".png"), plot = last_plot(), 
+         width = 5.5, height = 4, units = "in", dpi = 300)  
+}
+
+
+
