@@ -13,22 +13,31 @@
 # Impassable barriers:
 #    Snoqualmie Falls = rid 488 (network rbm) or rid 53 (network nhd1)
 #    Tolt Reservoir dam = rid 179 (network rbm) or rid 308 (network nhd1)
-
-# Notes 
-  # @@@-WIP denotes work in progress
-  # \\ denotes lines used for testing
-
+#
 #*******************************************************************************
 
 
-#for(scenario in c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")){
-# years: 2003:2013
-#for(scenario in c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M"))
-# years: 1995:2005 Historical climate; 2089:2099 Future climate; 2003:2013 Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
 rm(list=ls());gc() #clear workspace
-scenario = "current_climate_riparian_0"
-#yy = 2005
-for(yy in c(2006:2013)){
+
+# CHOOSE OPTIONS BELOW BEFORE RUNNING SIMULATIONS:
+
+# Calibration
+riparian.scenario.list <- "climate0"
+climate.scenario.list <- c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")
+years2run <- 2006:2013 #Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
+
+# Scenarios
+riparian.scenario.list <- c("riparian0", "riparian1", "riparian2", "riparian3")
+climate.scenario.list <- c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
+# choose from the lists above:
+climate.scenario <- climate.scenario.list[1] 
+riparian.scenario <- riparian.scenario.list[1]
+period <- "historical" # options: calibration, historical, future
+if(period == "historical") years2run <- 1995:2005
+if(period == "future") years2run <- 2089:2099
+
+# Run set of years and scenarios selected:
+for(yy in c(years2run)){
 
 #=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
@@ -49,8 +58,6 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   fish_other.nm = "lmb"
   netnm = "sno" # used for plotting and some functions
   network = "rbm" #nhd1"
-  #yy = 2011 # year
-  #scenario = "current_climate_riparian_3"
   first.date = as.Date(paste0(yy-1, "-", "09-01")) #starting date for simulation and for spawning
   last.date = as.Date(paste0(yy, "-", "08-31")) #last date of the simulation
   dat.idx = seq(from = first.date, to = last.date, by = 1) # list of all dates to model
@@ -64,7 +71,7 @@ start.time = proc.time() #get initial time stamp for calculating processing time
   if(interspecific.competition.flag == FALSE & interspecific.predation.flag == TRUE) tag = "P" #Predation
   if(interspecific.competition.flag == TRUE & interspecific.predation.flag == TRUE) tag = "B" #Both
   ifelse(tag != "A", SecondSpecies<- TRUE, SecondSpecies<- FALSE)
-  tag = paste0(scenario, ".", tag)
+  tag = paste0(climate.scenario, ".", tag)
   iter.list = 1 #1:10 # list of simulation replicates (iterations) to run
   iter = 1
   plot.iter = 2 # which iteration will have maps plotted for each time step
@@ -169,13 +176,13 @@ start.time = proc.time() #get initial time stamp for calculating processing time
 # Load Attribute, Network, and Fish growth data
   if(network == "rbm"){
     # Load DHSVM-RBM flow and water temperature data for the climate scenario
-    Q.df = read.csv(paste0("data.in/rbm.data/riparian0/", scenario, "/Q.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    Q.df = read.csv(paste0("data.in/rbm.data/", riparian.scenario, "/", climate.scenario, "/Q.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #Q.df = Q_all.df[Q_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & Q_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
-    WT.df = read.csv(paste0("data.in/rbm.data/riparian0/", scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
+    WT.df = read.csv(paste0("data.in/rbm.data/", riparian.scenario, "/", climate.scenario, "/WT.", yy, ".df"), header = TRUE, stringsAsFactors = FALSE)
     #WT.df = WT_all.df[WT_all.df$Date >= as.Date(paste0(yy-1,"-09-01")) & WT_all.df$Date <= as.Date(paste0(yy,"-09-30")),] #limit to the correct year
     
   } else if(network == "nhd1"){
-    # Load pre-calculated SSN water temperature (flow) data for the climate scenario
+    # Load pre-calculated SSN water temperature (flow) data for the appropriate scenario
     Q.df = NULL
     WT.df = read.csv(paste0(loadDir, "/", ssn.folder, "/WT.df", yy, ".csv"), header = TRUE, stringsAsFactors = FALSE)
   }
@@ -1225,13 +1232,14 @@ for(iter in iter.list){
   end.time = proc.time()
   runtime = (end.time[3] - start.time[3]) / 60 / 60
   
-  # Store info on no. replicates, climate scenarios, and runtime
+  # Store info on no. replicates, scenarios, and runtime
   textDir = paste0(outputDir, "/run.info.", yy, ".", iter, ".txt")
   file.create(textDir)
   
   run.info<- c(paste0("netnwork: ",netnm),
           paste0("year: ", yy),
-          paste0("scenario: ", scenario),
+          paste0("riparian scenario: ", riparian.scenario),
+          paste0("climate scenario: ", climate.scenario),
           paste0("runtime (h): ", runtime),
           paste0("seed: ", iter),
           paste0("run: ", run),
