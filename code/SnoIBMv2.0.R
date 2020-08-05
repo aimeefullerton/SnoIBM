@@ -39,7 +39,7 @@ if(period == "historical") years2run <- 1995:2005
 if(period == "future") years2run <- 2089:2099
 
 # Run set of years and scenarios selected:
-for(yy in c(years2run)){
+for(yy in years2run){
 
 #=== SETUP =====================================================================
 start.time = proc.time() #get initial time stamp for calculating processing time
