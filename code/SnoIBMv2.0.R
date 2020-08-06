@@ -22,21 +22,18 @@ rm(list=ls());gc() #clear workspace
 # CHOOSE OPTIONS BELOW BEFORE RUNNING SIMULATIONS:
 
 # Calibration
-riparian.scenario.list <- "climate0"
 climate.scenario.list <- c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")
-period = "calibration"; years2run <- 2006:2013 #Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
-climate.scenario <- climate.scenario.list[1] 
-riparian.scenario <- riparian.scenario.list[1]
+years2run <- 2006:2013 #Baseline (all one year less b/c water quality time series start on 10-01 whereas model starts on 09-01)
+climate.scenario <- "current_climate_riparian_0" # or choose from list above
+riparian.scenario <- "climate0"
 
 # Scenarios
 riparian.scenario.list <- c("riparian0", "riparian1", "riparian2", "riparian3")
 climate.scenario.list <- c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
 # choose from the lists above:
-climate.scenario <- climate.scenario.list[1] 
-riparian.scenario <- riparian.scenario.list[1]
-period <- "historical" # options: calibration, historical, future
-if(period == "historical") years2run <- 1995:2005
-if(period == "future") years2run <- 2089:2099
+climate.scenario <- "bcc-csm1-1-m" 
+riparian.scenario <- "riparian0"
+years2run <- c(1995:2005, 2089:2099)
 
 # Run set of years and scenarios selected:
 for(yy in years2run){
