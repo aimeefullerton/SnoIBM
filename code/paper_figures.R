@@ -172,7 +172,7 @@ for(time.period in c("historical", "future")){
   for(scenario in climate.scenario.list){
     scenario.data <- NULL
     if(time.period == "historical") years <- 1995:2005
-    if(time.period == "historical") years <- 2089:2099
+    if(time.period == "future") years <- 2089:2099
     
     for(yy in years){
       outdir <- paste0(scenario, ".A.", yy)
@@ -206,6 +206,45 @@ for(time.period in c("historical", "future")){
   assign(paste0("growth.", time.period), scenarios.data)
   save(scenarios.data, file = paste0("data.out/growth.", time.period, ".RData"))
 }
+  
+# riparian full restoration scenario:
+  scenarios.data <- NULL
+  for(scenario in climate.scenario.list){
+    scenario.data <- NULL
+    years <- 2089:2099
+    
+    for(yy in years){
+      outdir <- paste0(scenario, ".A.", yy)
+      load(file = paste0(data.out,"_riparian1/", outdir, "/salmon.array.", yy, ".1.RData"))
+      
+      # Post-emergence filter
+      emgd <- salmon.array[,"emrg",]
+      emgd[emgd != 1] <- NA
+      
+      # Potential yearling survival filter
+      srv.age1 <- salmon.array[,"survive", dim(salmon.array)[3]]
+      srv.age1[srv.age1 != 1] <- NA
+      s.age1 <- array(srv.age1, dim = c(dim(salmon.array)[1], dim(salmon.array)[3]))
+      
+      # Get growth for potential yearlings only once emerged and only for fish that survived to the end
+      dat <- salmon.array[,"growth",] * s.age1 * emgd
+      dat <- dat[,seq(2, dim(salmon.array)[3], 2)] + dat[,seq(1, dim(salmon.array)[3], 2)]
+      
+      # Take mean of growth across these fish
+      dat <- apply(dat, 2, mean, na.rm = T) 
+      
+      # Remove leap year's extra day:
+      if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
+        dat <- dat[-60]
+      }
+      scenario.data <- cbind(scenario.data, dat)
+    }
+    scenario.data[is.nan(scenario.data)] <- NA
+    scenarios.data <- abind::abind(scenarios.data, scenario.data, along = 3)
+  }
+  assign(paste0("growth.riparian1.future"), scenarios.data)
+  save(scenarios.data, file = paste0("data.out/growth.riparian1.future", ".RData"))
+
 
 #  -- For DHSVM-RBM figures (warning: takes a long time!) ----
 
@@ -214,6 +253,7 @@ for(time.period in c("historical", "future")){
 for(time.period  in c("historical", "future")){
   riparian.scenario <- "riparian0"; suffix <- ""
   climate.scenario <- climate.scenario.list[1]
+  themetric <- "mean" #"median"
   
   # FLOW
   # Import and collect all raw data
@@ -244,10 +284,10 @@ for(time.period  in c("historical", "future")){
   
   Q.seasons <- Q.df %>% 
     group_by(Season) %>%
-    summarise_if(is.numeric, median, na.rm = TRUE) #older dplyr
+    summarise_if(is.numeric, themetric, na.rm = TRUE) #older dplyr
   #summarise(across(where(is.numeric), median, na.rm = TRUE)) #newer dplyr
   Q.seasons <- Q.seasons[!is.na(Q.seasons$Season), -2] #remove NAs and Time column
-  write.csv(Q.seasons, file = paste0("data.in/rbm.data/Q.seasonal.medians.", time.period , ".csv"))
+  write.csv(Q.seasons, file = paste0("data.in/rbm.data/Q.seasonal.",themetric, "s.", time.period , ".csv"))
   rm(Q.df, Qq, foo)
   
   assign(paste0("Q.seasons.", time.period ), Q.seasons); rm(Q.seasons)
@@ -281,10 +321,10 @@ for(time.period  in c("historical", "future")){
   
   T.seasons <- T.df %>% 
     group_by(Season) %>%
-    summarise_if(is.numeric, median, na.rm = TRUE) #older dplyr
+    summarise_if(is.numeric, themetric, na.rm = TRUE) #older dplyr
   #summarise(across(where(is.numeric), median, na.rm = TRUE)) #newer dplyr
   T.seasons <- T.seasons[!is.na(T.seasons$Season), -2] #remove NAs and Time column
-  write.csv(T.seasons, file = paste0("data.in/rbm.data/T.seasonal.medians.", time.period , ".csv"))
+  write.csv(T.seasons, file = paste0("data.in/rbm.data/T.seasonal.", themetric, "s.", time.period , ".csv"))
   rm(T.df, Tt, foo)
   
   assign(paste0("T.seasons.", time.period ), T.seasons); rm(T.seasons)
@@ -378,10 +418,11 @@ for(riparian.scenario in riparian.scenario.list){
 
 # DHSVM-RBM data:
 # Figure 5 maps
+themetric <- "mean" #"median"
 for(time.period  in c("historical", "future")){
-  foo <- read.csv(paste0("data.in/rbm.data/T.seasonal.medians.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  foo <- read.csv(paste0("data.in/rbm.data/T.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
   assign(paste0("T.seasons.", time.period ), foo); rm(foo)
-  foo <- read.csv(paste0("data.in/rbm.data/Q.seasonal.medians.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  foo <- read.csv(paste0("data.in/rbm.data/Q.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
   assign(paste0("Q.seasons.", time.period ), foo); rm(foo)
 }
 
@@ -528,7 +569,7 @@ left2 <- theseq2[1:10]
 rght2 <- theseq2[2:11]
 
 # Make maps
-png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Maps.png"), width = 7.5, height = 14, units = "in", res = 300)
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Maps_mean.png"), width = 7.5, height = 14, units = "in", res = 300)
 par(mfrow = c(5, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
 
 seasons <- c("Fall", "Winter", "Spring", "Summer", "Blank")
@@ -653,17 +694,18 @@ for(riparian.scenario in riparian.scenario.list){
 png(paste0(plot.directory,"/Figure6_QT_annual_change.png"), width = 5.5, height = 9, units = "in", res = 300)
 par(las = 1, mfrow = c(5,1), mar = c(2.5,8,0,0.5), oma = c(0.5, 3, 0.5, 0.5))
 
+themetric <- "mean"
 # Top row Riparian baseline future minus historical
 # Flow
 Qdat.h <- riparian0.historical.Qdat
 Qdat.f <- riparian0.future.Qdat
 Qdat <- Qdat.f - Qdat.h; Qdat <- Qdat[-c(1,2,ncol(Qdat))]; Qdat$Date <- Qdat.h$Date
 themin <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
-themin <- apply(themin[,2:11], 1, mean)
+themin <- apply(themin[,2:11], 1, themetric)
 themedian <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
-themedian <- apply(themedian[,2:11], 1, mean)
+themedian <- apply(themedian[,2:11], 1, themetric)
 themax <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
-themax <- apply(themax[,2:11], 1, mean)
+themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Qdat.h$Date), rev(unique(Qdat.h$Date)))
 
 plot(unique(Qdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-600, 1200), xaxt = 'n', cex.lab = 1.3, las = 1)
@@ -681,11 +723,11 @@ Tdat.h <- riparian0.historical.Tdat
 Tdat.f <- riparian0.future.Tdat
 Tdat <- Tdat.f - Tdat.h; Tdat <- Tdat[-c(1,2,ncol(Tdat))]; Tdat$Date <- Tdat.h$Date
 themin <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
-themin <- apply(themin[,2:11], 1, mean)
+themin <- apply(themin[,2:11], 1, themetric)
 themedian <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
-themedian <- apply(themedian[,2:11], 1, mean)
+themedian <- apply(themedian[,2:11], 1, themetric)
 themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
-themax <- apply(themax[,2:11], 1, mean)
+themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
 
 plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 15), xaxt = 'n', cex.lab = 1.3)
@@ -859,8 +901,8 @@ if (save.figures) {
 
 
 #--- Figure 9: YEARLING GROWTH -----
-png(paste0(plot.directory, "/Figure9_growth_over_time.png"), width = 7.5, height = 9, units = "in", res = 300)
-par(mfrow = c(2, 1), las = 1, mar = c(3,7,1,1), oma = rep(0.5, 4), cex = 1.1)
+png(paste0(plot.directory, "/Figure9_growth_over_time.png"), width = 6, height = 9, units = "in", res = 300)
+par(mfrow = c(3, 1), las = 1, mar = c(3,7,1,1), oma = rep(0.5, 4), cex = 1.1)
 
 for(timeperiod in c("historical", "future")){
   td <- get(paste0("growth.", timeperiod))
@@ -879,7 +921,7 @@ for(timeperiod in c("historical", "future")){
   lng.out<- length(months)
   maxX <- length(dat[,3])
   
-  ylm <- c(-0.0263, 0.037)
+  ylm <- c(-0.0263, 0.04)
   
   if(timeperiod == "historical") {mycols <- c("#B0BFFC96", "#6262bf", "#00008B"); leglab = "(a) Historical"}
   if(timeperiod == "future") {mycols <- c("#fad189", "#fca553", "#db7902"); leglab = "(b) Future"}
@@ -904,6 +946,45 @@ for(timeperiod in c("historical", "future")){
   
   legend("topleft", legend = leglab, bty = 'n')
 }
+
+# Add riparian restoration scenario panel:
+td <- get("growth.riparian1.future")
+dat <- apply(td, 1, quantile, probs = c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = T)
+dat<- t(dat)
+
+# Set up date axis
+first.date <- as.Date("1994-09-01") #starting date for simulation and for spawning
+last.date <- as.Date("1995-08-31") #last date of the simulation
+months <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+minX <- trunc(which(dat[,3] > 0))[1]
+val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+val2 <- as.numeric(format(last.date, "%m"))
+if(val1 >= 9 & val1 <= 12) months <- months[c(val1:length(months), 1:val2)]
+if(val1 >= 1 & val1 <= 8) months <- months[val1:val2]
+lng.out<- length(months)
+maxX <- length(dat[,3])
+
+mycols <- c("#d3c3e0", "#775f8a", "#572282"); leglab = "(c) Future + full riparian restoration"
+
+plot(dat[,3], ylim = ylm, ylab = "", type = 'n', xaxt = 'n', xlab = "", xlim = c(minX, maxX), cex.axis = 1)
+axis(1, at = seq(minX, maxX, length.out = lng.out), labels = months)
+#ylab = expression(paste("Growth (g g ",d^-1,")"))
+mtext("Growth \n(g \u2219", side = 2, line = 7, adj = 0, cex = 1.1)
+mtext(expression(g^-1*" "), side = 2, line = 7, adj = -1, padj = 0.98, cex = 1.1)
+mtext(expression(d^-1*")"), side = 2, line = 7, adj = -1.9, padj = 0.98, cex = 1.1)
+
+#Min/Max
+polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 1], rev(dat[minX: maxX, 5])), border = NA, col = mycols[1])
+
+#Q1/Q3
+polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 2], rev(dat[minX: maxX, 4])), border = NA, col = mycols[2])
+
+#Median
+lines(dat[,3], lwd = 2, col = mycols[3])
+
+abline(h = 0, lty = 3, col = "darkgray")
+
+legend("topleft", legend = leglab, bty = 'n')
 
 dev.off()
 
