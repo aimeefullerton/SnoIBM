@@ -65,13 +65,11 @@ ssn <- SSN::importSSN(paste0("data.in/sno.rbm.ssn"), predpts = 'preds')
 
 #--- Gather data from scenarios to be compared
 #  -- For IBM output figures ----
-scenario.list <- climate.scenario.list
-
 for(riparian.scenario in riparian.scenario.list){
   
 # Gather historical climate scenario data
 time.period  <- "historical"
-for(scenario in scenario.list){
+for(scenario in climate.scenario.list){
   scenario.data <- NULL
   years <- 1995:2005
   for(yy in years){
@@ -370,6 +368,7 @@ for(time.period  in c("historical", "future")){
 
 load("data.out/growth.historical.RData")
 load("data.out/growth.future.RData")
+load("data.out/growth.riparian1.future.RData")
 
 for(riparian.scenario in c("riparian0", "riparian1", "riparian2", "riparian3")){
   for(time.period  in c("historical", "future")){
@@ -902,19 +901,20 @@ if (save.figures) {
 
 #--- Figure 9: YEARLING GROWTH -----
 png(paste0(plot.directory, "/Figure9_growth_over_time.png"), width = 6, height = 9, units = "in", res = 300)
-par(mfrow = c(3, 1), las = 1, mar = c(3,7,1,1), oma = rep(0.5, 4), cex = 1.1)
+par(mfrow = c(3, 1), las = 1, mar = c(2,7,0.5,1), oma = rep(0.5, 4), cex = 1.1)
 
 for(timeperiod in c("historical", "future")){
   td <- get(paste0("growth.", timeperiod))
   dat <- apply(td, 1, quantile, probs = c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = T)
   dat<- t(dat)
-  
+
   # Set up date axis
   first.date <- as.Date("1994-09-01") #starting date for simulation and for spawning
   last.date <- as.Date("1995-08-31") #last date of the simulation
   months <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-  minX <- trunc(which(dat[,3] > 0))[1]
-  val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+  #minX <- trunc(which(dat[,3] > 0))[1]
+  #val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+  minX <- 67; val1 <- 11
   val2 <- as.numeric(format(last.date, "%m"))
   if(val1 >= 9 & val1 <= 12) months <- months[c(val1:length(months), 1:val2)]
   if(val1 >= 1 & val1 <= 8) months <- months[val1:val2]
@@ -926,23 +926,23 @@ for(timeperiod in c("historical", "future")){
   if(timeperiod == "historical") {mycols <- c("#B0BFFC96", "#6262bf", "#00008B"); leglab = "(a) Historical"}
   if(timeperiod == "future") {mycols <- c("#fad189", "#fca553", "#db7902"); leglab = "(b) Future"}
 
-  plot(dat[,3], ylim = ylm, ylab = "", type = 'n', xaxt = 'n', xlab = "", xlim = c(minX, maxX), cex.axis = 1)
-  axis(1, at = seq(minX, maxX, length.out = lng.out), labels = months)
+  plot(dat.hf[,3], ylim = ylm, ylab = "", type = 'n', xaxt = 'n', xlab = "", xlim = c(minX, maxX), cex.axis = 1)
+  axis(1, at = seq(minX, maxX, length.out = lng.out), labels = rep("",10))
   #ylab = expression(paste("Growth (g g ",d^-1,")"))
   mtext("Growth \n(g \u2219", side = 2, line = 7, adj = 0, cex = 1.1)
   mtext(expression(g^-1*" "), side = 2, line = 7, adj = -1, padj = 0.98, cex = 1.1)
   mtext(expression(d^-1*")"), side = 2, line = 7, adj = -1.9, padj = 0.98, cex = 1.1)
   
   #Min/Max
-  polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 1], rev(dat[minX: maxX, 5])), border = NA, col = mycols[1])
+  polygon(c(minX: maxX, rev(minX: maxX)), c(dat.hf[minX: maxX, 1], rev(dat.hf[minX: maxX, 5])), border = NA, col = mycols[1])
   
   #Q1/Q3
-  polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 2], rev(dat[minX: maxX, 4])), border = NA, col = mycols[2])
+  polygon(c(minX: maxX, rev(minX: maxX)), c(dat.hf[minX: maxX, 2], rev(dat.hf[minX: maxX, 4])), border = NA, col = mycols[2])
   
   #Median
-  lines(dat[,3], lwd = 2, col = mycols[3])
+  lines(dat.hf[,3], lwd = 2, col = mycols[3])
   
-  abline(h = 0, lty = 3, col = "darkgray")
+  abline(h = 0, lty = 2)
   
   legend("topleft", legend = leglab, bty = 'n')
 }
@@ -956,8 +956,9 @@ dat<- t(dat)
 first.date <- as.Date("1994-09-01") #starting date for simulation and for spawning
 last.date <- as.Date("1995-08-31") #last date of the simulation
 months <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-minX <- trunc(which(dat[,3] > 0))[1]
-val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+#minX <- trunc(which(dat[,3] > 0))[1]
+#val1 <- as.numeric(format(as.Date(minX + 1, origin = first.date), "%m"))
+minX <- 67; val1 <- 11
 val2 <- as.numeric(format(last.date, "%m"))
 if(val1 >= 9 & val1 <= 12) months <- months[c(val1:length(months), 1:val2)]
 if(val1 >= 1 & val1 <= 8) months <- months[val1:val2]
@@ -982,7 +983,7 @@ polygon(c(minX: maxX, rev(minX: maxX)), c(dat[minX: maxX, 2], rev(dat[minX: maxX
 #Median
 lines(dat[,3], lwd = 2, col = mycols[3])
 
-abline(h = 0, lty = 3, col = "darkgray")
+abline(h = 0, lty = 2)
 
 legend("topleft", legend = leglab, bty = 'n')
 
