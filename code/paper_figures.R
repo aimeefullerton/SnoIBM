@@ -1,5 +1,5 @@
 # Figures used for Fullerton et al. manuscript describing results from climate and riparian scenario effects on Chinook salmon
-# Last updated 10 July 2010
+# Last updated 18 August 2020
 
 # Load packages
 library(tidyverse)
@@ -247,11 +247,11 @@ for(time.period in c("historical", "future")){
 #  -- For DHSVM-RBM figures (warning: takes a long time!) ----
 
 # Load data for Figure 5:
-# Compute seasonal medians of flow & water temperature (historical and future climate, baseline riparian)
+# Compute seasonal means of flow & water temperature (historical and future climate, baseline riparian)
+  themetric <- "mean"
 for(time.period  in c("historical", "future")){
   riparian.scenario <- "riparian0"; suffix <- ""
   climate.scenario <- climate.scenario.list[1]
-  themetric <- "mean" #"median"
   
   # FLOW
   # Import and collect all raw data
@@ -326,6 +326,51 @@ for(time.period  in c("historical", "future")){
   rm(T.df, Tt, foo)
   
   assign(paste0("T.seasons.", time.period ), T.seasons); rm(T.seasons)
+}
+
+# Load data for Figure 6 maps:
+# Compute seasonal means of water temperature (future climate)
+  time.period <- "future"
+  themetric <- "mean"
+for(riparian.scenario in c("riparian1", "riparian2", "riparian3")){
+    suffix <- paste0("_s", substr(riparian.scenario,9,9))
+    climate.scenario <- climate.scenario.list[1]
+    
+    # TEMPERATURE only
+    # Import and collect all raw data
+    T.df <- fncImportWT(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))
+    for(climate.scenario in climate.scenario.list[2:length(climate.scenario.list)]){
+      Tt <- fncImportQ(paste0(data.in, "/rbm.data/", riparian.scenario, "/", climate.scenario, "/Tw_output.", time.period , suffix, ".csv"))
+      T.df <- rbind(T.df, Tt)  
+    }
+    
+    # Get dates into consistent year
+    idx <- which(T.df[,"Date"] < as.Date("2089-10-01") | T.df[,"Date"] > as.Date("2099-09-30")); years <- 2089:2099
+    T.df <- T.df[-idx,]; T.df<- T.df[!is.na(T.df$Date),]
+    T.df$Year <- lubridate::year(T.df$Date)
+    for(yy in years){
+      foo <- T.df[T.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(T.df[, "Date"]),]
+      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+      T.df[T.df[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.df[, "Date"] <= as.Date(paste0(yy, "-09-30")) & !is.na(T.df[, "Date"]),] <- foo
+    }
+    
+    # Add season column & summarize by season 
+    T.df$Season <- NA
+    T.df$Season[T.df$Date >= as.Date("1900-10-01") & T.df$Date <= as.Date("1900-11-30") | T.df$Date >= as.Date("1901-09-01")] <- "fall"
+    T.df$Season[T.df$Date >= as.Date("1900-12-01") & T.df$Date <= as.Date("1901-02-28")] <- "winter"
+    T.df$Season[T.df$Date >= as.Date("1901-03-01") & T.df$Date <= as.Date("1901-05-31")] <- "spring"
+    T.df$Season[T.df$Date >= as.Date("1901-06-01") & T.df$Date <= as.Date("1901-08-31")] <- "summer"
+    
+    T.seasons <- T.df %>% 
+      group_by(Season) %>%
+      summarise_if(is.numeric, themetric, na.rm = TRUE) #older dplyr
+    #summarise(across(where(is.numeric), median, na.rm = TRUE)) #newer dplyr
+    T.seasons <- T.seasons[!is.na(T.seasons$Season), -2] #remove NAs and Time column
+    write.csv(T.seasons, file = paste0("data.in/rbm.data/T.seasonal.", themetric, "s.", riparian.scenario , ".csv"))
+    rm(T.df, Tt, foo)
+    
+    assign(paste0("T.seasons.", riparian.scenario), T.seasons); rm(T.seasons)
 }
 
 # Load data for Figure 6:
@@ -526,16 +571,23 @@ for(riparian.scenario in riparian.scenario.list){
 container
 write.csv(container, "data.out/Table1.csv", row.names = F)
 
-#--- Figure 5: DHSVM-RBM Flow & Water temperature maps -----
+#--- Figure 5: DHSVM-RBM CLIMATE CHANGE EFFECT MAPS -----
 
 # Read in basin outline & streams
 basin <- read_sf(paste0("data.in/shapefiles"), "Basin_snq2")
-# dissolve on area to just get the outline
-basin2 <- basin %>% summarise(area = sum(AreaSqKm))
-streams <- read_sf(paste0("data.in/", ssn.folder), "edges")
-
-# Set extent for plotting (will be updated later once ssn is loaded)
+basin2 <- basin %>% summarise(area = sum(AreaSqKm)) # dissolve on area to just get the outline
 ex <- raster::extent(basin2)
+streams <- read_sf("data.in/shapefiles", "streamline_original")
+idx <- which(streams$downarc == -1)[2:7] #isolated reaches that need to be removed
+streams <- streams[-idx,]
+streams$Q <- NA
+streams$WT <- NA
+streams$col.class.q <- NA
+streams$col.class.t <- NA
+
+seasons <- c("Fall", "Winter", "Spring", "Summer", "Blank")
+Qletters <- c("(a)", "(b)", "(c)", "(d)")
+Tletters <- c("(e)", "(f)", "(g)", "(h)")
 
 # Change (future minus historical)
 Q.seasons <- Q.seasons.future[2:ncol(Q.seasons.future)] - Q.seasons.historical[2:ncol(Q.seasons.historical)]
@@ -548,150 +600,136 @@ T.seasons <- T.seasons[c(1,4,2,3),] #reorder seasons for plotting
 Q.seasons <- Q.seasons[c(1,4,2,3),] #reorder seasons for plotting
 
 # water temperature
-cb <- RColorBrewer::brewer.pal(9, "Reds")
+cb <- RColorBrewer::brewer.pal(7, "Reds")
 cb <- c("#fcfafa", cb)
-theseq <- round(quantile(t(T.seasons), probs = c(0, 0.05, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1)), 1)
-#theseq <- quantile(t(T.seasons), probs = c(0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1))
-#theseq <- round(seq(0, 10, length.out = 8), 1); theseq <- c(theseq, 15)
-#theseq <- c(0, 1.5, 3, 4.5, 6, 7.5, 9, 10.5, 15)
-left <- theseq[1:10]
-rght <- theseq[2:11]
+theseq <- quantile(t(T.seasons), probs = c(0, 0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.95, 1))
+left <- theseq[1:(length(theseq) - 1)]
+rght <- theseq[2:length(theseq)]
 
-#flow
-cb2 <- RColorBrewer::brewer.pal(9, "RdBu")
-cb2 <- c("#5e0401", cb2[c(1:4,6:9)], "#014270")
-theseq2 <- round(quantile(t(Q.seasons), probs = c(0, 0.05, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1)), 2)
-#theseq2 <- quantile(t(Q.seasons), probs = c(0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1))
-#theseq2 <- round(seq(-43, 73, length.out = 8), 2); theseq2 <- c(theseq2[theseq2 < 0], 0, theseq2[theseq2 > 0])
-#theseq2 <- c(quantile(t(Q.seasons[Q.seasons < 0]))[1:4], quantile(t(Q.seasons[Q.seasons > 0])))
-left2 <- theseq2[1:10]
-rght2 <- theseq2[2:11]
+# flow
+cb2 <- RColorBrewer::brewer.pal(7, "RdBu")
+cb2 <- c("#5e0401", cb2[c(1:3,5:7)], "#014270")
+theseq2 <- quantile(t(Q.seasons), probs = c(0, 0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.95, 1))
+left2 <- theseq2[1:(length(theseq2) - 1)]
+rght2 <- theseq2[2:length(theseq2)]
 
-# Make maps
-png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Maps_mean.png"), width = 7.5, height = 14, units = "in", res = 300)
-par(mfrow = c(5, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
-
-seasons <- c("Fall", "Winter", "Spring", "Summer", "Blank")
-Qletters <- c("(a)", "(b)", "(c)", "(d)")
-Tletters <- c("(e)", "(f)", "(g)", "(h)")
+# Make seasonal flow change maps
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Qmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
+par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
 
 for(ss in 1:length(seasons)){
   season <- seasons[ss]
-  
-  for(var in c("Flow", "Temperature")){
-    if(var == "Flow") letter <- Qletters[ss]
-    if(var == "Temperature") letter <- Tletters[ss]
+  letter <- Qletters[ss]
+
+  if(ss != 5){
     
-    if(ss != 5){
-      
-      # plot background
-      plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
-      #plot(streams[,"afvArea"], col = 1, lwd = afvArea, type = 'l', add = TRUE)
-      
-      if(var == "Flow"){
-        # Flow:
-        if("Q" %in% colnames(ssn@data)){ssn = fncUnloadWQ("Q",ssn)} # unload if it's already loaded
-        dat <- cbind("rid" = colnames(Q.seasons), "Q" = t(Q.seasons[ss,]))
-        dat[,"rid"] <- as.numeric(gsub("X", "", dat[,"rid"])); colnames(dat)[2] <- "Q"
-        ssn@data <- merge(ssn@data, dat, by.x = "rid", by.y = "rid", all.x = T)
-        ssn@data$Q <- as.numeric(ssn@data$Q) #just in case, sometimes they show up as characters
-        
-        for(n in 1:length(cb2)) {ssn@data$Q.color[ssn@data$Q >= left2[n] & ssn@data$Q <= rght2[n]]= n}
-        
-        for (i in 1:length(ssn@lines)) {
-          for (j in 1:length(ssn@lines[[i]])) {
-            lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb2[ssn@data[i,"Q.color"]], lwd = 8 * (ssn@data[i, "afvArea"] + 0.1))
-          }
-        }
-      }
-      
-      if(var == "Temperature"){
-        # Water temperature
-        if("WT" %in% colnames(ssn@data)){ssn = fncUnloadWQ("WT",ssn)} # unload if it's already loaded
-        dat <- cbind("rid" = colnames(T.seasons), "WT" = t(T.seasons[ss,]))
-        dat[,"rid"] <- as.numeric(gsub("X", "", dat[,"rid"])); colnames(dat)[2] <- "WT"
-        ssn@data <- merge(ssn@data, dat, by.x = "rid", by.y = "rid", all.x = T)
-        ssn@data$WT <- as.numeric(ssn@data$WT) #just in case, sometimes they show up as characters
-        
-        for(n in 1:length(cb)) {ssn@data$WT.color[ssn@data$WT >= left[n] & ssn@data$WT <= rght[n]]= n}
-        
-        for (i in 1:length(ssn@lines)) {
-          for (j in 1:length(ssn@lines[[i]])) {
-            lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb[ssn@data[i,"WT.color"]], lwd = 8 * (ssn@data[i, "afvArea"] + 0.1))
-          }
-        }
-      }
-      text(x = ex[1] + 5000, y = ex[3] + 3500, paste(letter, season), cex = 1.5)
-    }
+    # plot background
+    plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
+
+    qq <- t(Q.seasons[ss,]) #4 = summer temperature
+    streams$Q <- qq
+    for(n in 1:length(cb2)) {streams$col.class.q[streams$Q >= left2[n] & streams$Q <= rght2[n]] <- n}
     
-    if(ss == 5){
-      # Add flow legend
-      if(var == "Flow"){
-        plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
-        leglabs = paste(round(left2, 2), "to", round(rght2, 2))
-        legend("center", legend = leglabs, title = expression(Delta~"Flow (m s"^-1*")"), bty = "n", pch = 19, col = cb2, cex = 1.5)
-      }
-      # Add temperature legend
-      if(var == "Temperature"){
-        plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
-        leglabs = paste(round(left, 1), "to", round(rght , 1))
-        legend("center", legend = leglabs, title = expression(Delta~"Water temperature ("*degree*C*")"), bty = "n", pch = 19, col = cb, cex = 1.5)
-      }
-    }
+    # plot colored stream lines
+    plot(streams, add = T, lwd = (streams$segorder * 0.1) + 0.5, col = cb2[streams$col.class.q])
+
+    # add descriptive label
+    text(x = ex[1], y = ex[3] + 3500, paste(letter, season), cex = 1.5, adj = 0)
   }
+  
+  # if(ss == 5){
+  # # Add flow legend
+  #    plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
+  #   leglabs = paste(round(left2, 2), "to", round(rght2, 2))
+  #   legend("center", legend = leglabs, title = expression(Delta~"Flow (m s"^-1*")"), bty = "n", pch = 19, col = cb2, cex = 1.5)
+  # }
 }
 
 dev.off()
 
-#--- Figure 6: DHSVM-RBM Change in flow and temperature time series -----
-# Get all data into same year for plotting
-# change year so that day-month is the comparable across scenarios.
-for(riparian.scenario in riparian.scenario.list){
-  for(time.period  in c("historical", "future")){
-    if(time.period  == "historical") theyears <- 1995:2005
-    if(time.period  == "future") theyears <- 2089:2099
-    Q.data <- get(paste0(riparian.scenario, ".", time.period , ".Q"))
-    T.data <- get(paste0(riparian.scenario, ".", time.period , ".T"))
-    Q.data$Year = lubridate::year(Q.data$Date)
-    T.data$Year = lubridate::year(T.data$Date)
+# Make seasonal water temperature change maps
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Tmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
+par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+
+for(ss in 1:length(seasons)){
+  season <- seasons[ss]
+  letter <- Tletters[ss]
     
-    for(yy in theyears){
-      
-      # Remove leap year's extra day:
-      if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
-        idx <- which(Q.data$Date == as.Date(paste0(yy, "-02-29")))
-        Q.data <- Q.data[-idx,]
-        T.data <- T.data[-idx,]
-        rm(idx)
-      }
-      
-      #Flow
-      foo = Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),]
-      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
-      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
-      Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),] <- foo
-      #Temp
-      foo = T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),]
-      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
-      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
-      T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),] <- foo
-    }
+  if(ss != 5){
     
-    # remove extra erroneous records
-    idx <- which(Q.data$Date > as.Date("1901-09-30"))
-    if(length(idx) > 0) {Q.data <- Q.data[-idx,]; rm(idx)}
-    idx <- which(T.data$Date > as.Date("1901-09-30"))
-    if(length(idx) > 0) {T.data <- T.data[-idx,]; rm(idx)}
+    # plot background
+    plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
     
+    wt <- t(T.seasons[ss,]) #4 = summer temperature
+    streams$WT <- wt
+    for(n in 1:length(cb)) {streams$col.class.t[streams$WT >= left[n] & streams$WT <= rght[n]] <- n}
     
-    assign(paste0(riparian.scenario, ".", time.period , ".Qdat"), Q.data)
-    assign(paste0(riparian.scenario, ".", time.period , ".Tdat"), T.data)
+    # plot colored stream lines
+    plot(streams, add = T, lwd = (streams$segorder * 0.1) + 0.5, col = cb[streams$col.class.t])
+  
+    # add descriptive label
+    text(x = ex[1], y = ex[3] + 3500, paste(letter, season), cex = 1.5, adj = 0)
   }
+  
+  # if(ss == 5){
+  #   # Add temperature legend
+  #   if(var == "Temperature"){
+  #     plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
+  #     leglabs = paste(round(left, 1), "to", round(rght , 1))
+  #     legend("center", legend = leglabs, title = expression(Delta~"Water temperature ("*degree*C*")"), bty = "n", pch = 19, col = cb, cex = 1.5)
+  #   }
+  # }
 }
 
+dev.off()
 
-png(paste0(plot.directory,"/Figure6_QT_annual_change.png"), width = 5.5, height = 9, units = "in", res = 300)
-par(las = 1, mfrow = c(5,1), mar = c(2.5,8,0,0.5), oma = c(0.5, 3, 0.5, 0.5))
+#--- Figure 5: DHSVM-RBM CLIMATE CHANGE EFFECT TIME SERIES -----
+# Get all data into same year for plotting
+# change year so that day-month is the comparable across scenarios.
+riparian.scenario <- "riparian0"
+for(time.period  in c("historical", "future")){
+  if(time.period  == "historical") theyears <- 1995:2005
+  if(time.period  == "future") theyears <- 2089:2099
+  Q.data <- get(paste0(riparian.scenario, ".", time.period , ".Q"))
+  T.data <- get(paste0(riparian.scenario, ".", time.period , ".T"))
+  Q.data$Year = lubridate::year(Q.data$Date)
+  T.data$Year = lubridate::year(T.data$Date)
+  
+  for(yy in theyears){
+    
+    # Remove leap year's extra day:
+    if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
+      idx <- which(Q.data$Date == as.Date(paste0(yy, "-02-29")))
+      Q.data <- Q.data[-idx,]
+      T.data <- T.data[-idx,]
+      rm(idx)
+    }
+    
+    #Flow
+    foo = Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),]
+    lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+    lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+    Q.data[Q.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & Q.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(Q.data[, "Date"]),] <- foo
+    #Temp
+    foo = T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),]
+    lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+    lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+    T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),] <- foo
+  }
+  
+  # remove extra erroneous records
+  idx <- which(Q.data$Date > as.Date("1901-09-30"))
+  if(length(idx) > 0) {Q.data <- Q.data[-idx,]; rm(idx)}
+  idx <- which(T.data$Date > as.Date("1901-09-30"))
+  if(length(idx) > 0) {T.data <- T.data[-idx,]; rm(idx)}
+  
+  
+  assign(paste0(riparian.scenario, ".", time.period , ".Qdat"), Q.data)
+  assign(paste0(riparian.scenario, ".", time.period , ".Tdat"), T.data)
+}
+
+png(paste0(plot.directory,"/Figure5_QT_timeseries.png"), width = 9, height = 2.3, units = "in", res = 300)
+par(las = 1, mfrow = c(1,2), mar = c(2, 5, 0.5, 3), oma = c(0.5, 3, 0.5, 0))
 
 themetric <- "mean"
 # Top row Riparian baseline future minus historical
@@ -707,15 +745,15 @@ themax <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.95); 
 themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Qdat.h$Date), rev(unique(Qdat.h$Date)))
 
-plot(unique(Qdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-600, 1200), xaxt = 'n', cex.lab = 1.3, las = 1)
-axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
-mtext("\u0394 Flow \n(m \u2219", side = 2, line = 9, adj = 0, cex = 0.9)
-mtext(expression(s^-1*")"), side = 2, line = 8, adj = -0.6, padj = 0.88, cex = 1)
+plot(unique(Qdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-600, 1200), cex.axis = 0.9, las = 1)
+#axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
+mtext("\u0394 Flow \n(m \u2219", side = 2, line = 6, adj = 0, cex = 0.9)
+mtext(expression(s^-1*")"), side = 2, line = 5, adj = -0.6, padj = 0.88, cex = 1)
 #mtext("\u0394 Flow \n(m \u2219 s\u207B\u00B9)", side = 2, line = 6, adj = 0.5, cex = 0.9)
-polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][7])
-lines(unique(Qdat.h$Date), themedian, col = mycolors[[3]][7])
-abline(h = 1, lty = 3, col = "darkgray")
-legend("topleft", legend = "(a) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
+polygon(xvals, c(themin, rev(themax)), border = NA, col = "darkgray")
+lines(unique(Qdat.h$Date), themedian, lwd = 1.5)
+abline(h = 1, lty = 2)
+#legend("topleft", legend = "(a) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
 
 # Temperature
 Tdat.h <- riparian0.historical.Tdat
@@ -729,13 +767,171 @@ themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); 
 themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
 
-plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 15), xaxt = 'n', cex.lab = 1.3)
+plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 16), cex.axis = 0.9)
+#axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
+mtext("\u0394 Water\ntemperature\n(\u00B0C)", side = 2, line = 4, adj = 0.5, cex = 0.9)
+polygon(xvals, c(themin, rev(themax)), border = NA, col = "#FC9272")
+lines(unique(Tdat.h$Date), themedian, col = "#99000D", lwd = 1.5)
+abline(h = 1, lty = 2)
+#legend("topleft", legend = "(b) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
+
+dev.off()
+
+#--- Figure 6: DHSVM-RBM RIPARIAN EFFECT MAPS -----
+
+# Read in basin outline & streams
+basin <- read_sf(paste0("data.in/shapefiles"), "Basin_snq2")
+basin2 <- basin %>% summarise(area = sum(AreaSqKm)) # dissolve on area to just get the outline
+add.labels <- F #add descriptive labels & legends to each panel?
+if(add.labels == T) ex <- raster::extent(basin2)
+streams <- read_sf("data.in/shapefiles", "streamline_original")
+idx <- which(streams$downarc == -1)[2:7] #isolated reaches that need to be removed
+streams <- streams[-idx,]
+streams$WT <- NA
+streams$col.class <- NA
+
+descriptions <- c("(a) Climate effect, \nBaseline riparian", "(b) Full restoration \neffect, Future climate", "(c) Partial restoration \neffect, Future climate", "(d) Riparian degradation \neffect, Future climate")
+riparian.scenario.list <- c("riparian1", "riparian3", "riparian2")
+
+# Make maps
+png(paste0(plot.directory, "/Figure6_DHSVM-RBM_Maps_mean.png"), width = 5, height = 14, units = "in", res = 300)
+par(mfrow = c(4, 1), oma = rep(0.5,4), las = 1)
+
+# Future minus historical
+  T.seasons <- T.seasons.future[2:ncol(T.seasons.future)] - T.seasons.historical[2:ncol(T.seasons.historical)]
+  rownames(T.seasons) <- T.seasons.historical$Season
+  T.seasons <- T.seasons[,-ncol(T.seasons)] #remove Year column
+  T.seasons <- T.seasons[c(1,4,2,3),] #reorder seasons for plotting
+  
+  cb <- RColorBrewer::brewer.pal(7, "Reds")
+  cb <- c("#fcfafa", cb)
+  theseq <- quantile(t(T.seasons), probs = c(0, 0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.95, 1))
+  left <- theseq[1:(length(theseq) - 1)]
+  rght <- theseq[2:length(theseq)]
+
+  wt <- t(T.seasons[4,]) #4 = summer temperature
+  streams$WT <- wt
+  for(n in 1:length(cb)) {streams$col.class[streams$WT >= left[n] & streams$WT <= rght[n]] <- n}
+  
+  # plot background
+  plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
+  # plot colored stream lines
+  plot(streams, add = T, lwd = (streams$segorder * 0.1) + 0.5, col = cb[streams$col.class])
+  # add descriptive label
+  if(add.labels == T) text(x = ex[1] - 100, y = ex[3] + 2500, descriptions[1], cex = 1.5, adj = 0)
+  # Add  legend
+  if(add.labels == T){
+    leglabs = paste(round(left, 2), "to", round(rght , 2))
+    legend("right", legend = leglabs, title = expression(Delta~"Water temperature ("*degree*C*")"), bty = "n", pch = 19, col = cb)
+  }
+  box()
+
+# Change (riparian scenario minus future baseline)
+for(i in 1:length(riparian.scenario.list)){
+  descr <- descriptions[i + 1]
+  riparian.scenario <- riparian.scenario.list[i]
+
+    T.scenario <- get(paste0("T.seasons.", riparian.scenario))
+    T.seasons <- T.scenario[2:ncol(T.scenario)] - T.seasons.future[2:ncol(T.seasons.future)]
+    rownames(T.seasons) <- T.seasons.future$Season
+    T.seasons <- T.seasons[,-ncol(T.seasons)] #remove Year column
+    T.seasons <- T.seasons[c(1,4,2,3),] #reorder seasons for plotting
+    wt <- t(T.seasons[4,]) #4 = summer temperature
+    streams$WT <- wt
+    
+    # set colors
+    if(riparian.scenario %in% c("riparian1", "riparian3")){
+      cb <- RColorBrewer::brewer.pal(8, "Blues")
+      theseq <- c(quantile(wt[wt < 0], probs = c(0, 0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.95, 1)), max(wt))
+     }
+    if(riparian.scenario == "riparian2"){
+      cb <- RColorBrewer::brewer.pal(8, "Reds")
+      theseq <- c(min(wt), quantile(wt[wt > 0], probs = c(0, 0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.95, 1)))
+      theseq <- theseq[length(theseq):1]
+    }
+    cb <- c("#fcfafa", cb) #add white
+    cb <- cb[length(cb):1] #reverse color order
+    left <- theseq[1:(length(theseq) - 1)]
+    rght <- theseq[2:length(theseq)]
+    for(n in 1:length(cb)) {streams$col.class[streams$WT >= left[n] & streams$WT <= rght[n]] <- n}
+    
+    # plot background
+    plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
+    # plot colored stream lines
+    plot(streams, add = T, lwd = (streams$segorder * 0.1) + 0.5, col = cb[streams$col.class])
+    # add descriptive label
+    if(add.labels == T) text(x = ex[1] - 100, y = ex[3] + 2500, descr, cex = 1.5, adj = 0)
+    # Add  legend
+    if(add.labels == T){
+      leglabs = paste(round(left, 2), "to", round(rght , 2))
+      legend("right", legend = leglabs, title = expression(Delta~"Water temperature ("*degree*C*")"), bty = "n", pch = 19, col = cb)
+    }
+    box()
+}
+
+dev.off()
+# reset riparian scenario list
+riparian.scenario.list <- c("riparian0", "riparian1", "riparian2", "riparian3") #Baseline, Full restoration, Degradation, Partial restoration
+
+#--- Figure 6: DHSVM-RBM RIPARIAN EFFECT TIME SERIES -----
+# Get all data into same year for plotting
+# change year so that day-month is the comparable across scenarios.
+for(riparian.scenario in riparian.scenario.list){
+  for(time.period  in c("historical", "future")){
+    if(time.period  == "historical") theyears <- 1995:2005
+    if(time.period  == "future") theyears <- 2089:2099
+    T.data <- get(paste0(riparian.scenario, ".", time.period , ".T"))
+    T.data$Year = lubridate::year(T.data$Date)
+    
+    for(yy in theyears){
+      
+      # Remove leap year's extra day:
+      if(yy %in% c(1996, 2000, 2004, 2092, 2096)){
+        idx <- which(Q.data$Date == as.Date(paste0(yy, "-02-29")))
+        T.data <- T.data[-idx,]
+        rm(idx)
+      }
+      
+      #Temp
+      foo = T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),]
+      lubridate::year(foo[foo[, "Year"] == yy - 1, "Date"]) <- 1900
+      lubridate::year(foo[foo[, "Year"] == yy, "Date"]) <- 1901
+      T.data[T.data[, "Date"] >= as.Date(paste0(yy - 1, "-10-01")) & T.data[, "Date"] < as.Date(paste0(yy, "-10-01")) & !is.na(T.data[, "Date"]),] <- foo
+    }
+    
+    # remove extra erroneous records
+    idx <- which(T.data$Date > as.Date("1901-09-30"))
+    if(length(idx) > 0) {T.data <- T.data[-idx,]; rm(idx)}
+    
+    assign(paste0(riparian.scenario, ".", time.period , ".Tdat"), T.data)
+  }
+}
+
+png(paste0(plot.directory,"/Figure6_QT_timeseries.png"), width = 5.3, height = 9.3, units = "in", res = 300)
+par(las = 1, mfrow = c(4,1), mar = c(2.2, 8.5, 0, 0.5), oma = c(0.5, 3, 0.5, 0.5))
+
+themetric <- "mean"
+# Top row Riparian baseline future minus historical
+
+# Temperature
+Tdat.h <- riparian0.historical.Tdat
+Tdat.f <- riparian0.future.Tdat
+Tdat <- Tdat.f - Tdat.h; Tdat <- Tdat[-c(1,2,ncol(Tdat))]; Tdat$Date <- Tdat.h$Date
+themin <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.05); colnames(themin)[1] <- "Date"
+themin <- apply(themin[,2:11], 1, themetric)
+themedian <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.5); colnames(themedian)[1] <- "Date"
+themedian <- apply(themedian[,2:11], 1, themetric)
+themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
+themax <- apply(themax[,2:11], 1, themetric)
+xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
+
+plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 17), xaxt = 'n', cex.axis = 1.5)
 axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
-mtext("\u0394 Temperature\n(\u00B0C)", side = 2, line = 6.5, adj = 0.5, cex = 0.9)
-polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][5])
-lines(unique(Tdat.h$Date), themedian, col = mycolors[[3]][5])
-abline(h = 1, lty = 3, col = "darkgray")
-legend("topleft", legend = "(b) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
+mtext("\u0394 Water\ntemperature\n(\u00B0C)", side = 2, line = 7.5, adj = 0.5, cex = 0.9)
+polygon(xvals, c(themin, rev(themax)), border = NA, col = "#FC9272")
+lines(unique(Tdat.h$Date), themedian, col = "#99000D", lwd = 1.5)
+abline(h = 1, lty = 2)
+legend("topleft", legend = "(a) Climate effect, Baseline riparian", bty = 'n', cex = 1.4)
 
 # Next 3 rows: Riparian scenario future X minus riparian baseline scenario future
 for(riparian.scenario in riparian.scenario.list[c(2,4,3)]){
@@ -753,18 +949,22 @@ for(riparian.scenario in riparian.scenario.list[c(2,4,3)]){
   xvals <- c(unique(Tdat.0$Date), rev(unique(Tdat.0$Date)))
   
   if(riparian.scenario == riparian.scenario.list[3]){
-    plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-1.25, 1.25), cex.lab = 1.3)
-    mtext("\u0394 Temperature\n(\u00B0C)", side = 2, line = 6.5, adj = 0.5, cex = 0.9)
+    plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-1.25, 1.25), xaxt = 'n', cex.axis = 1.5)
+    axis(1, cex.axis = 1.5, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), 
+         labels = c("Nov", "Jan", "Mar", "May", "Jul", "Sep"))
+    mtext("\u0394 Water\ntemperature\n(\u00B0C)", side = 2, line = 7.5, adj = 0.5, cex = 0.9)
   
   }else{
-    plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-1.25, 1.25), xaxt = 'n', cex.lab = 1.3)
+    plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-1.25, 1.25), xaxt = 'n', cex.axis = 1.5)
     axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
-    mtext("\u0394 Temperature\n(\u00B0C)", side = 2, line = 6.5, adj = 0.5, cex = 0.9)
+    mtext("\u0394 Water\ntemperature\n(\u00B0C)", side = 2, line = 7.5, adj = 0.5, cex = 0.9)
   }
-  polygon(xvals, c(themin, rev(themax)), border = NA, col = mycolors[[1]][5])
-  lines(unique(Tdat.0$Date), themedian, col = mycolors[[3]][5])
-  abline(h = 0, lty = 3, col = "darkgray")
-  lg <- c("(c) Full restoration effect, Future climate", "(e) Riparian degradation effect, Future climate", "(d) Partial restoration effect, Future climate")[as.numeric(substr(riparian.scenario, 9, 9))]
+  colors2use <- c("#6BAED6", "#084594")
+  if(riparian.scenario == riparian.scenario.list[3]) colors2use <- c("#FC9272", "#99000D")
+  polygon(xvals, c(themin, rev(themax)), border = NA, col = colors2use[1])
+  lines(unique(Tdat.0$Date), themedian, col = colors2use[2], lwd = 1.5)
+  abline(h = 0, lty = 2)
+  lg <- c("(b) Full restoration effect, Future climate", "(d) Riparian degradation effect, Future climate", "(c) Partial restoration effect, Future climate")[as.numeric(substr(riparian.scenario, 9, 9))]
   legend("topleft", legend = lg, bty = 'n', cex = 1.4)
   
 }
