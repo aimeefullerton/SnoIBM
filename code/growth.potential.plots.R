@@ -4,18 +4,18 @@ rm(list=ls()); gc()
 library(RColorBrewer)
 
 # seg directory where data are stored
-setwd("/Volumes/BluPassport/SnoIBM")
+load.dir <- "/Volumes/BluPassport/SnoIBM/data.out_growth.potential"
 
 # would you like to save these figures?
 save.figures <- TRUE
 if (save.figures) {
   # specify directory for plot output
-  plot.directory <- paste0(getwd(), "/data.out/Figures")
+  plot.directory <- paste0(getwd(), "/plots")
   if (!dir.exists(plot.directory)) {dir.create(plot.directory)}
 }
 
 #Load reaches for summary
-load("/Users/aimee_fullerton/OneDrive/Work/Research/SnoBIA/SnoIBM/data.in/sno.rbm.ssn/dnsegs.RData")
+load("data.in/sno.rbm.ssn/dnsegs.RData")
 reaches <- dnsegs[488][[1]]
 
 # load data froom scenarios to be compared
@@ -29,17 +29,17 @@ years.f <- 2089:2099
 
 # function to extract the necessary data from each array
 fncIsolateBySeason <- function(array, field, scenario, year, season, start, stop){
-  dat <- salmon.array[,field,start:stop]
+  dat <- salmon.array[,field, start:stop]
   dat <- apply(dat, 1, sum)
   dat <- as.data.frame(dat, drop = F)
   dat <- cbind(scenario, season, year, dat)
-  dat$rid <- salmon.array[,"seg",1]
+  dat$rid <- salmon.array[,"seg", 1]
   colnames(dat) <- c("scenario", "season", "year", "growth.potential", "rid")
   dat <- dat[!is.na(dat[,"growth.potential"]),]
   return(dat)
 }
 
-# Get data collated for historical and future for each species
+# Get data collated for historical and future for each species (Run first time only; takes a long time) ####
 for(species in species.list){
 for(period in c("h", "f")){
   if(period == "h"){years <- years.h}
@@ -48,13 +48,13 @@ for(period in c("h", "f")){
   for(scenario in scenario.list){
     for(yy in years){
       outdir <- paste0("GrwPot.", species, ".", scenario, ".", yy)
-      load(file = paste0("data.out/", outdir, "/salmon.array.", yy, ".", iter, ".RData"))
+      load(file = paste0(load.dir, "/", outdir, "/salmon.array.", yy, ".", iter, ".RData"))
       
       # total growth potential for winter at each location
-      aut <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "aut", 1, (90*2))
-      win <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "win", (90*2), (181*2))
-      spr <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "spr", (181*2), (273*2))
-      sum <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "sum", (273*2), 730)
+      aut <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "aut", 1, (90*2)) #SON
+      win <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "win", (90*2), (181*2)) #DJF
+      spr <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "spr", (181*2), (273*2)) #MAM
+      sum <- fncIsolateBySeason(salmon.array, "growth", scenario, yy, "sum", (273*2), 730) #JJA
       # combine
       dat <- rbind(aut, win, spr, sum)
       rm(aut, win, spr, sum)
@@ -67,8 +67,24 @@ for(period in c("h", "f")){
   
   assign(paste0(species, ".scen.dat.", period), scen.dat)
   assign(paste0(species, ".mainstem.", period), mainstem)
+  
+  save(scen.dat, file = paste0(load.dir, "/", paste0(species, ".scen.dat.", period), ".RData"))
+  save(mainstem, file = paste0(load.dir, "/", paste0(species, ".mainstem.", period), ".RData"))
+  
   rm(scen.dat, mainstem)
 }
+}
+
+
+
+# Reload data (skip above step) ####
+for(species in species.list){
+  for(period in c("h", "f")){
+    load(paste0(load.dir, "/", paste0(species, ".scen.dat.", period), ".RData"))
+    load(paste0(load.dir, "/", paste0(species, ".mainstem.", period), ".RData"))
+    assign(paste0(species, ".scen.dat.", period), scen.dat)
+    assign(paste0(species, ".mainstem.", period), mainstem)
+  }
 }
 
 
@@ -85,53 +101,6 @@ dat2plot.f <- tapply(mainstem.f$growth.potential, list(mainstem.f$season, mainst
 dat2plot.h <- dat2plot.h[c(3,2,4,1),] #re-arrange seasons for plotting
 dat2plot.f <- dat2plot.f[c(3,2,4,1),]
 
-# Plot historical and future separately but in same plot
-mycolors <- c("darkorange", "orange", brewer.pal(9, "Purples"))
-mybreaks <- quantile(c(dat2plot.h, dat2plot.f), probs = seq(0,1,0.1))
-mybreaks <- c(0, mybreaks)
-
-png(paste0(plot.directory, "/", species, "_growth_potential.png"), width = 5, height = 8, units = "in", res = 300)
-  par(mfrow = c(2,1), mar = c(4,3.5,0.5,1), las = 1)
-  image(1:31, 1:4, t(dat2plot.h), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
-  axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
-  reaches.inv <- reaches[length(reaches):1]
-  #axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
-  
-  image(1:31, 1:4, t(dat2plot.f), axes = F, ylab = "", xlab = "Distance upstream (km)", col = mycolors, breaks = sort(mybreaks))
-  axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
-  #axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
-dev.off()
-
-
-# Plot difference future minus historical
-mainstem <- cbind(mainstem.h, mainstem.f[, c("year", "growth.potential")])
-colnames(mainstem)[ncol(mainstem)] <- "growth.potential.f"
-mainstem$growth.diff <- mainstem$growth.potential.f - mainstem$growth.potential
-quantile(mainstem$growth.diff)
-dat2plot <- tapply(mainstem$growth.diff, list(mainstem$season, mainstem$rid), mean)
-dat2plot <- dat2plot[c(3,2,4,1),]
-
-mycolors1 <- brewer.pal(9, "Purples")
-mycolors2 <- brewer.pal(8, "Oranges")[8:1]
-mycolors <- c(mycolors2, mycolors1)
-mybreaks1 <- quantile(mainstem$growth.diff[mainstem$growth.diff > 0], probs = seq(0, 1, 0.13))
-mybreaks2 <- quantile(mainstem$growth.diff[mainstem$growth.diff < 0], probs = seq(0, 1, 0.13))
-mybreaks <- c(mybreaks2, 0, mybreaks1, max(mainstem$growth.diff))
-
-png(paste0(plot.directory, "/", species, "_growth_differential.png"), width = 5, height = 4, units = "in", res = 300)
-par(mar = c(4,3.5,0.5,1), las = 1)
-image(1:31, 1:4, t(dat2plot), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
-axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
-#reaches.inv <- reaches[length(reaches):1]
-#axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
-dev.off()
-
-
-# Legend
-par(mfrow=c(2,1))
-image(cbind(1:9, 1:9), col = mycolors1, axes = F)
-image(cbind(1:9, 1:9), col = c(mycolors2, "white"), axes = F)
-
 
 # get quantiles & mean for each species (pooled across climate scenarios and years, not broken out by season and reach)
 for(species in species.list[-5]){
@@ -144,10 +113,7 @@ for(species in species.list[-5]){
 }
 
 
-
-
-
-# Alternative line & quantile plot format 
+# Line & quantile plot for Yan et al. manuscript ####
 
 fncColors4Quantiles <- function(){
   #Min/max
@@ -199,32 +165,108 @@ c3 <- fncColors4Quantiles()[[3]][c(2,6,7,3)]
 #   legend ("topright", legend = c("aut", "win", "spr", "sum"), lty = 1, col = c(4,3,2,1), bty = 'n')
 # dev.off()
 
+fncGetSpecies <- function(species){
+  if(species == "chinook") spnm <- "Chinook salmon"
+  if(species == "steelhead") spnm <- "Steelhead"
+  if(species == "coho") spnm <- "Coho salmon"
+  if(species == "pink") spnm <- "Pink salmon"
+  if(species == "rainbow") spnm <- "Rainbow trout"
+  if(species == "lmb") spnm <- "Largemouth bass"
+  return (spnm)
+}
 
 # Difference (F - H)
 png(paste0(plot.directory, "/growth_potential_diff.png"), width = 7, height = 7, units = "in", res = 300)
-  par(mfrow = c(3, 2), mar = c(1, 3.5, 2, 1), las = 1)
+  par(mfrow = c(3, 2), mar = c(5, 4, 2, 0.5), oma = c(0, 4, 0, 0), las = 1)
   
-  for(species in (species.list[-5])){
+  species2plot <- c("chinook", "blank", "coho", "pink", "steelhead", "lmb")
+  for(species in species2plot){
+    
+    if(species == "blank"){
+    plot(1:10, 1:10, type = 'n', axes = F, xlab = "", ylab = "")
+    legend ("center", legend = c("winter", "spring", "autumn", "summer"), lty = 1, lwd = 4, col = c3[c(3,2,4,1)], bty = 'n', cex = 1.5)
+    } else {
+    
+    species.nm <- fncGetSpecies(species)
     ifelse(species == "pink", i.list <- 2:4, i.list <- 1:4)
     mainstem.h <- get(paste0(species, ".mainstem.h"))
     mainstem.f <- get(paste0(species, ".mainstem.f"))
     mainstem <- cbind(mainstem.h, mainstem.f[, c("year", "growth.potential")])
     colnames(mainstem)[ncol(mainstem)] <- "growth.potential.f"
     mainstem$growth.diff <- mainstem$growth.potential.f - mainstem$growth.potential
+    mainstem$growth.diff.pct <- mainstem$growth.diff / mainstem$growth.potential * 100
     
     dat2plot.Md <- tapply(mainstem$growth.diff, list(mainstem$season, mainstem$rid), quantile, probs = 0.5)[c(3,2,4,1),]
     dat2plot.Q1 <- tapply(mainstem$growth.diff, list(mainstem$season, mainstem$rid), quantile, probs = 0.25)[c(3,2,4,1),]
     dat2plot.Q3 <- tapply(mainstem$growth.diff, list(mainstem$season, mainstem$rid), quantile, probs = 0.75)[c(3,2,4,1),]
 
-  plot(dat2plot.Md[1,], type = 'n', col = c3[1], ylim = c(-4.2, 2.5),  ylab = "", xlab = "", axes = F, main = species) #ylim = range(c(dat2plot.Q1, dat2plot.Q3))
+    #ylm <- c(min(dat2plot.Q1), max(dat2plot.Q3))
+    ylm <- c(-4.2, 2)
+    
+  plot(dat2plot.Md[1,], type = 'n', col = c3[1], ylim = ylm,  ylab = "", xlab = "", axes = F)
   axis(2)
-  #axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
+  if(species %in% c("chinook", "coho", "steelhead")) mtext("\u0394 Growth\npotential\n(g/g/d)", side = 2, line = 4.5, adj = 0.5, cex = 0.9)
+  
+  if(species %in% c("lmb", "steelhead")){
+    axis(1, at = seq(1, 31, 5), labels = round(seq(1, 70, length.out = 7),0))
+    mtext("Distance upstream (km)", side = 1, line = 3)
+  }
+  if(!species %in% c("lmb", "steelhead")) axis(1, at = seq(1, 31, 5), labels = NA)
   for(i in i.list){polygon(c(1: 31, rev(1: 31)), c(dat2plot.Q1[i, ], rev(dat2plot.Q3[i, ])), border = NA, col = c2[i])} #Q1/Q3
   for(i in i.list){ lines(dat2plot.Md[i,], col = c3[i])} #Median
   abline(h = 0, lty = 3)
-  abline(h = -4.2)
+  mtext(species.nm, 3, cex = 1.2)
   }
-  plot(1:10, 1:10, type = 'n', axes = F, xlab = "", ylab = "")
-  legend ("center", legend = c("winter", "spring", "autumn", "summer"), lty = 1, lwd = 4, col = c3[c(3,2,4,1)], bty = 'n')
+  }
+  
 dev.off()
+
+
+
+# Grid plot: plot historical and future separately but in same plot ####
+mycolors <- c("darkorange", "orange", brewer.pal(9, "Purples"))
+mybreaks <- quantile(c(dat2plot.h, dat2plot.f), probs = seq(0,1,0.1))
+mybreaks <- c(0, mybreaks)
+
+png(paste0(plot.directory, "/", species, "_growth_potential.png"), width = 5, height = 8, units = "in", res = 300)
+par(mfrow = c(2,1), mar = c(4,3.5,0.5,1), las = 1)
+image(1:31, 1:4, t(dat2plot.h), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
+axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
+reaches.inv <- reaches[length(reaches):1]
+#axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
+
+image(1:31, 1:4, t(dat2plot.f), axes = F, ylab = "", xlab = "Distance upstream (km)", col = mycolors, breaks = sort(mybreaks))
+axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
+#axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
+dev.off()
+
+
+# Grid plot: plot difference future minus historical ####
+mainstem <- cbind(mainstem.h, mainstem.f[, c("year", "growth.potential")])
+colnames(mainstem)[ncol(mainstem)] <- "growth.potential.f"
+mainstem$growth.diff <- mainstem$growth.potential.f - mainstem$growth.potential
+quantile(mainstem$growth.diff)
+dat2plot <- tapply(mainstem$growth.diff, list(mainstem$season, mainstem$rid), mean)
+dat2plot <- dat2plot[c(3,2,4,1),]
+
+mycolors1 <- brewer.pal(9, "Purples")
+mycolors2 <- brewer.pal(8, "Oranges")[8:1]
+mycolors <- c(mycolors2, mycolors1)
+mybreaks1 <- quantile(mainstem$growth.diff[mainstem$growth.diff > 0], probs = seq(0, 1, 0.13))
+mybreaks2 <- quantile(mainstem$growth.diff[mainstem$growth.diff < 0], probs = seq(0, 1, 0.13))
+mybreaks <- c(mybreaks2, 0, mybreaks1, max(mainstem$growth.diff))
+
+png(paste0(plot.directory, "/", species, "_growth_differential.png"), width = 5, height = 4, units = "in", res = 300)
+par(mar = c(4,3.5,0.5,1), las = 1)
+image(1:31, 1:4, t(dat2plot), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
+axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
+#reaches.inv <- reaches[length(reaches):1]
+#axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
+dev.off()
+
+
+# Legend
+par(mfrow=c(2,1))
+image(cbind(1:9, 1:9), col = mycolors1, axes = F)
+image(cbind(1:9, 1:9), col = c(mycolors2, "white"), axes = F)
 
