@@ -1,7 +1,12 @@
+## Growth potential for Snoqualmie salmonids and LMB for Yan et al. manuscript
+
+# Setup ####
 rm(list=ls()); gc()
 
 # load packages
 library(RColorBrewer)
+library(sf)
+library(tidyverse)
 
 # seg directory where data are stored
 load.dir <- "/Volumes/BluPassport/SnoIBM/data.out_growth.potential"
@@ -78,6 +83,8 @@ for(period in c("h", "f")){
 
 
 # Reload data (skip above step) ####
+species.list <- species.list[-5] #remove rainbow trout; different spatial extent
+
 for(species in species.list){
   for(period in c("h", "f")){
     load(paste0(load.dir, "/", paste0(species, ".scen.dat.", period), ".RData"))
@@ -86,7 +93,6 @@ for(species in species.list){
     assign(paste0(species, ".mainstem.", period), mainstem)
   }
 }
-
 
 species <- "chinook"
 mainstem.h <- get(paste0(species, ".mainstem.h"))
@@ -103,7 +109,7 @@ dat2plot.f <- dat2plot.f[c(3,2,4,1),]
 
 
 # get quantiles & mean for each species (pooled across climate scenarios and years, not broken out by season and reach)
-for(species in species.list[-5]){
+for(species in species.list){
   mainstem.h <- get(paste0(species, ".mainstem.h"))
   mainstem.f <- get(paste0(species, ".mainstem.f"))
   mainstem <- cbind(mainstem.h, mainstem.f[, c("year", "growth.potential")])
@@ -152,18 +158,6 @@ fncColors4Quantiles <- function(){
 c1 <- fncColors4Quantiles()[[1]][c(2,6,7,3)] #orange, green, blue, yellow
 c2 <- fncColors4Quantiles()[[2]][c(2,6,7,3)]
 c3 <- fncColors4Quantiles()[[3]][c(2,6,7,3)]
-
-# Hist / Fut
-# png(paste0(plot.directory, "/", species, "_growth_potential_h.png"), width = 5, height = 8, units = "in", res = 300)
-#   mybreaks <- sort(c(0,quantile(c(dat2plot.h, dat2plot.f), probs = seq(0,1,0.1))))
-#   
-#   par(mfrow = c(2,1), mar = c(4,3.5,0.5,1), las = 1)
-#   plot(dat2plot.h[1,], type = 'l', ylim = range(mybreaks),  ylab = "", xlab = "", xaxt = 'n')
-#   for(i in 2:4){ lines(dat2plot.h[i,], col = i)}
-#   axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
-#   
-#   legend ("topright", legend = c("aut", "win", "spr", "sum"), lty = 1, col = c(4,3,2,1), bty = 'n')
-# dev.off()
 
 fncGetSpecies <- function(species){
   if(species == "chinook") spnm <- "Chinook salmon"
@@ -221,6 +215,96 @@ png(paste0(plot.directory, "/growth_potential_diff.png"), width = 7, height = 7,
   
 dev.off()
 
+# Hist / Fut
+# png(paste0(plot.directory, "/", species, "_growth_potential_h.png"), width = 5, height = 8, units = "in", res = 300)
+#   mybreaks <- sort(c(0,quantile(c(dat2plot.h, dat2plot.f), probs = seq(0,1,0.1))))
+#   
+#   par(mfrow = c(2,1), mar = c(4,3.5,0.5,1), las = 1)
+#   plot(dat2plot.h[1,], type = 'l', ylim = range(mybreaks),  ylab = "", xlab = "", xaxt = 'n')
+#   for(i in 2:4){ lines(dat2plot.h[i,], col = i)}
+#   axis(1, at = seq(1, 31, 5), labels = reaches.inv[seq(1, length(reaches.inv), 5)])
+#   
+#   legend ("topright", legend = c("aut", "win", "spr", "sum"), lty = 1, col = c(4,3,2,1), bty = 'n')
+# dev.off()
+
+
+# Growth potential maps ####
+
+# Read in basin outline & streams
+basin <- read_sf(paste0("data.in/shapefiles"), "Basin_snq2")
+# dissolve on area to just get the outline
+basin2 <- basin %>% summarise(area = sum(AreaSqKm))
+streams <- read_sf("data.in/sno.rbm.ssn", "edges")
+
+# Set extent for plotting (will be updated later once ssn is loaded)
+ex <- raster::extent(basin2)
+
+# Read in SSN
+ssn <- SSN::importSSN(paste0("data.in/sno.rbm.ssn"), predpts = 'preds')
+
+
+# Make maps
+for(season in c("aut", "win", "spr", "sum")){
+png(paste0(plot.directory, paste0("/GrowthPotentialMaps_", season, ".png")), width = 7.5, height = 14, units = "in", res = 300)
+par(mfrow = c(3, 2), mar = rep(0, 4), oma = rep(0.5, 4), las = 1)
+
+letters <- c("(a)", "(b)", "(c)", "(d)", "(e)")
+
+for(ss in 1:(length(species.list) + 1)){
+  species <- species.list[ss]
+  
+    
+    if(ss != 6){
+      
+      # plot background
+      plot(basin2, col = "gray40", border = 1, lwd = 2, main = "", reset = FALSE)
+      #plot(streams[,"afvArea"], col = 1, lwd = afvArea, type = 'l', add = TRUE)
+      
+      # Get growth potential data for plotting
+      # remove these columns if they exist
+      idx <- which(colnames(ssn@data)%in% c("aut", "spr", "sum", "win"))
+      if(colnam %in% colnames(ssn@data)) ssn@data <- ssn@data[,-idx] 
+      # get historical data
+      dat.h <- get(paste0(species, ".scen.dat.h"))
+      dat.h <- t(tapply(dat.h$growth.potential, list(dat.h$season, dat.h$rid), mean))
+      dat.h <- cbind("rid" = as.numeric(row.names(dat.h)), dat.h)
+      # get future data
+      dat.f <- get(paste0(species, ".scen.dat.f"))
+      dat.f <- t(tapply(dat.f$growth.potential, list(dat.f$season, dat.f$rid), mean))
+      dat.f <- cbind("rid" = as.numeric(row.names(dat.f)), dat.f)
+      # get future minus historical and merge into ssn
+      dat <- cbind.data.frame("rid" = dat.h[,"rid"], dat.f[,2:5] - dat.h[,2:5])
+      ssn@data <- merge(ssn@data, dat, by.x = "rid", by.y = "rid", all.x = T) #merge growth pot. data into SSN
+      
+      # colors
+      cb <- RColorBrewer::brewer.pal(9, "Purples")
+      cb <- c("#fcfafa", cb)
+      ddd <- c(dat[,2], dat[,3], dat[,4], dat[,5])
+      theseq <- round(quantile(ddd, probs = seq(0, 1, 0.1)), 3)
+      left <- theseq[1:(length(theseq) - 1)]
+      rght <- theseq[2:length(theseq)]
+      
+      for(n in 1:length(cb)) {ssn@data$color[ssn@data[,season] >= left[n] & ssn@data[,season] <= rght[n]]= n}
+      
+      for (i in 1:length(ssn@lines)) {
+        for (j in 1:length(ssn@lines[[i]])) {
+          lines(ssn@lines[[i]]@Lines[[j]]@coords, col = cb[ssn@data[i,"color"]], lwd = 8 * (ssn@data[i, "afvArea"] + 0.1))
+        }
+      }
+      text(x = ex[1], y = ex[3] + 3500, paste(letters[ss], species), adj = 0, cex = 1.5)
+    }
+    
+    if(ss == 6){
+      # Add  legend
+        plot(1:10, 1:10, type = 'n', axes = F, xlab = 'n', ylab = 'n')
+        leglabs = paste(round(left, 2), "to", round(rght, 3))
+        legend("center", legend = leglabs, title = expression(Delta~"Growth potential (g d"^-1* "d"^-1*")"), bty = "n", pch = 19, col = cb, cex = 1.5)
+    }
+  
+}
+
+dev.off()
+}
 
 
 # Grid plot: plot historical and future separately but in same plot ####
