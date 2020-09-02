@@ -614,8 +614,10 @@ left2 <- theseq2[1:(length(theseq2) - 1)]
 rght2 <- theseq2[2:length(theseq2)]
 
 # Make seasonal flow change maps
-png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Qmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
-par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+#png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Qmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
+#par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Qmaps_mean2.png"), width = 3.5, height = 11, units = "in", res = 300)
+par(mfrow = c(4, 1), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
 
 for(ss in 1:length(seasons)){
   season <- seasons[ss]
@@ -648,8 +650,10 @@ for(ss in 1:length(seasons)){
 dev.off()
 
 # Make seasonal water temperature change maps
-png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Tmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
-par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+#png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Tmaps_mean.png"), width = 7.5, height = 7, units = "in", res = 300)
+#par(mfrow = c(2, 2), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
+png(paste0(plot.directory, "/Figure5_DHSVM-RBM_Tmaps_mean2.png"), width = 3.5, height = 11, units = "in", res = 300)
+par(mfrow = c(4, 1), mar = c(1, 0, 4, 0), oma = rep(0.5,4), las = 1)
 
 for(ss in 1:length(seasons)){
   season <- seasons[ss]
