@@ -1,7 +1,7 @@
-## Growth potential for Snoqualmie salmonids and LMB for Yan et al. manuscript
+## Growth potential figure for Snoqualmie fish for Yan et al. manuscript and growth potential figure for report
+# Last updated 23 Oct 2020
 
 # Setup ####
-rm(list=ls()); gc()
 
 # load packages
 library(RColorBrewer)
@@ -26,9 +26,9 @@ reaches <- dnsegs[488][[1]]
 # load data froom scenarios to be compared
 species.list <- c("chinook", "steelhead", "coho", "pink", "lmb", "rainbow")
 species <- "chinook"
-iter = 1
-scenario.list = c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
-#scenario.list = c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")
+iter <- 1
+scenario.list <- c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
+#scenario.list <- c("current_climate_riparian_0", "current_climate_riparian_1", "current_climate_riparian_2", "current_climate_riparian_3")
 years.h <- 1995:2005
 years.f <- 2089:2099
 
@@ -83,7 +83,7 @@ for(period in c("h", "f")){
 
 
 # Reload data (skip above step) ####
-species.list <- species.list[-which(species.list == "rainbow")] #remove rainbow trout; different spatial extent
+species.list <- species.list[-which(species.list == "rainbow")] #remove rainbow trout; different spatial extent than other species
 
 for(species in species.list){
   for(period in c("h", "f")){
@@ -307,12 +307,12 @@ dev.off()
 }
 
 
-# Grid plot: plot historical and future separately but in same plot ####
+# Not Used: Grid plot of historical and future separately in same plot ####
 mycolors <- c("darkorange", "orange", brewer.pal(9, "Purples"))
 mybreaks <- quantile(c(dat2plot.h, dat2plot.f), probs = seq(0,1,0.1))
 mybreaks <- c(0, mybreaks)
 
-png(paste0(plot.directory, "/", species, "_growth_potential.png"), width = 5, height = 8, units = "in", res = 300)
+png(paste0(plot.directory, "/", species, "_growth_potential1.png"), width = 5, height = 8, units = "in", res = 300)
 par(mfrow = c(2,1), mar = c(4,3.5,0.5,1), las = 1)
 image(1:31, 1:4, t(dat2plot.h), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
 axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
@@ -325,7 +325,7 @@ axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
 dev.off()
 
 
-# Grid plot: plot difference future minus historical ####
+# Not Used: Grid plot of future minus historical ####
 mainstem <- cbind(mainstem.h, mainstem.f[, c("year", "growth.potential")])
 colnames(mainstem)[ncol(mainstem)] <- "growth.potential.f"
 mainstem$growth.diff <- mainstem$growth.potential.f - mainstem$growth.potential
@@ -340,7 +340,7 @@ mybreaks1 <- quantile(mainstem$growth.diff[mainstem$growth.diff > 0], probs = se
 mybreaks2 <- quantile(mainstem$growth.diff[mainstem$growth.diff < 0], probs = seq(0, 1, 0.13))
 mybreaks <- c(mybreaks2, 0, mybreaks1, max(mainstem$growth.diff))
 
-png(paste0(plot.directory, "/", species, "_growth_differential.png"), width = 5, height = 4, units = "in", res = 300)
+png(paste0(plot.directory, "/", species, "_growth_differential2.png"), width = 5, height = 4, units = "in", res = 300)
 par(mar = c(4,3.5,0.5,1), las = 1)
 image(1:31, 1:4, t(dat2plot), axes = F, ylab = "", xlab = "", col = mycolors, breaks = sort(mybreaks))
 axis(2, at = 1:4, labels = c("Sum", "Spr", "Win", "Aut"))
@@ -354,3 +354,5 @@ par(mfrow=c(2,1))
 image(cbind(1:9, 1:9), col = mycolors1, axes = F)
 image(cbind(1:9, 1:9), col = c(mycolors2, "white"), axes = F)
 
+
+# End of file ====
