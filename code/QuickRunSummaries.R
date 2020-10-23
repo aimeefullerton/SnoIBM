@@ -106,14 +106,3 @@ a = 6.401e-6; b = 3.099 #wet weight exponential relationship from Jellyman et al
 # log(W) = log(a) + b * log(L)
 exp((log(W) - log(a))/b) #exponential equation 
 
-# Quadratic relationship
-# W = a * L ^ (b + c * log(L))
-a = 1.7664e-5; b = 2.7199; c = 0.0788 #wet weight quadratic relationship from Jellyman et al. (R2 = 0.990)
-#a = 4.9091e-13; b = -17.7233; c = 5.5704 #dry weight quadratic relationship from Jellyman et al (R2 = 0.912) #a was 4.9091e13 ?
-# aa * L^2 + bb * L - cc
-aa = exp(c); bb = exp(b); cc = -a
-exp((L = (-bb + sqrt(bb^2 - 4*aa*cc))/2*aa - W)) # ?!@#$!
-#https://www.mathsisfun.com/quadratic-equation-solver.html
-
-
-
