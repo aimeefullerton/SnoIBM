@@ -24,7 +24,7 @@ load("data.in/sno.rbm.ssn/dnsegs.RData")
 reaches <- dnsegs[488][[1]]
 
 # load data froom scenarios to be compared
-species.list <- c("chinook", "steelhead", "coho", "pink", "rainbow", "lmb")
+species.list <- c("chinook", "steelhead", "coho", "pink", "lmb", "rainbow")
 species <- "chinook"
 iter = 1
 scenario.list = c("bcc-csm1-1-m", "CanESM2", "CCSM4", "CNRM-CM5", "CSIRO-Mk3-6-0", "HadGEM2-CC365", "HadGEM2-ES365", "IPSL-CM5A-MR", "MIROC5", "NorESM1-M")
@@ -83,7 +83,7 @@ for(period in c("h", "f")){
 
 
 # Reload data (skip above step) ####
-species.list <- species.list[-5] #remove rainbow trout; different spatial extent
+species.list <- species.list[-which(species.list == "rainbow")] #remove rainbow trout; different spatial extent
 
 for(species in species.list){
   for(period in c("h", "f")){
@@ -202,7 +202,7 @@ png(paste0(plot.directory, "/growth_potential_diff.png"), width = 7, height = 7,
   if(species %in% c("chinook", "coho", "steelhead")) mtext("\u0394 Growth\npotential\n(g/g/d)", side = 2, line = 4.5, adj = 0.5, cex = 0.9)
   
   if(species %in% c("lmb", "steelhead")){
-    axis(1, at = seq(1, 31, 5), labels = round(seq(1, 70, length.out = 7),0))
+    axis(1, at = seq(1, 31, 5), labels = round(seq(1, 62, length.out = 7),0))
     mtext("Distance upstream (km)", side = 1, line = 3)
   }
   if(!species %in% c("lmb", "steelhead")) axis(1, at = seq(1, 31, 5), labels = NA)
