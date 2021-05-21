@@ -8,18 +8,18 @@ Fullerton, A.H., N. Sun, M.J. Baerwalde, B.L. Hawkins, and H. Yan. Mechanistic s
 
 STEP I: Set up.
 
-Follow these steps to download software, model input files, additional code, and libraries required to replicate our study.
+Follow these steps to download software, model input files, and libraries required to replicate our study.
 
-1) Download R and RStudio.
+1) Download and install R and RStudio.
 
 2) Clone or download this repository (https://github.com/aimeefullerton/SnoIBM).
 
-3) Create an R project in RStudio.
+3) Create a project in RStudio.
 
 4) Install libraries in the setup section of code/ibm-model.R.
 
 5) Acquire the necessary DHSVM-RBM output data (flow and temperature for each scenario). 
-These are available upon request and are not stored here due to their very large file size.
+Data can be downloaded here: https://1drv.ms/u/s!Ah4aNY3Kukn4hfZW2ONv-qND_CfodA?e=poXFaG  
 
 ----------------------------------------------------------------------------------
 
@@ -106,7 +106,7 @@ data.in/
 ..........upsegs.RData [calculated in step II-1 above]  
 .....fish.growth.lookup/  
 ..........st.growth.array.chinook.RData [calculated in step II-3 above]  
-.....rbm.data/ [contact aimee.fullerton@noaa.gov for output data from DHSVM-RBM needed here; large file size!]  
+.....rbm.data/
 ..........climate0/  
 ...............current_climate_riparian_0/  
 ....................Q.2002.df...Q.2013.df [calculated in step II-2 above from Outflow.Only.csv - this is flow output from DHSVM]  
