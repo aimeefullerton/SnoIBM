@@ -71,3 +71,112 @@ The 'images' directories each contain 730 PNG files that picture the Snoqualmie 
 STEP IV: Generate figures for the manuscript by running the appropriate script in the code/publications folder.
 
 ----------------------------------------------------------------------------------
+
+EXPECTED DIRECTORY STRUCTURE:
+
+code/  
+.....preprocessing/  
+..........1_pre-calculate_network_relationships.R  
+..........2_pre-load_wq_data.R  
+..........3_pre-calculate_growth.R  
+.....publications/  
+..........paper_figures.R  
+..........report_figures.R  
+..........growth.potential.figures.R  
+.....functions.R  
+.....ibm_model.R  
+.....growth_potential_model.R  
+  
+data.in/  
+.....parameters/  
+..........parameters.csv  
+..........nSpawnersByYear_WDFW.csv  
+..........Q_bm.csv  
+.....sno.rbm.ssn/  
+..........binaryID.db  
+..........edges.shp  
+..........sites.shp  
+..........netID1.dat  
+..........accessible_reaches.shp  
+..........Basin_snq.shp  
+..........chin_spawn_7785.shp  
+..........DHSVM_streams_AnadromousUse.csv  
+..........dnsegs.RData [calculated in step II-1 above]  
+..........jct.list.RData [calculated in step II-1 above]  
+..........upsegs.RData [calculated in step II-1 above]  
+.....fish.growth.lookup/  
+..........st.growth.array.chinook.RData [calculated in step II-3 above]  
+.....rbm.data/ [contact aimee.fullerton@noaa.gov for output data from DHSVM-RBM needed here; large file size!]  
+..........climate0/  
+...............current_climate_riparian_0/  
+....................Q.2002.df...Q.2013.df [calculated in step II-2 above from Outflow.Only.csv - this is flow output from DHSVM]  
+....................WT.2002.df...WT.2013.df  [calculated in step II-2 above from Tw_output.csv - this is water temperature from RBM]  
+...............current_climate_riparian_1/  
+...............current_climate_riparian_2/  
+...............current_climate_riparian_3/  
+..........riparian0/  
+...............bcc-csm1-1-m/  
+....................Q.1994.df...Q.2005.df [calculated in step II-2 above from Outflow.Only.historical.csv - this is flow output from DHSVM]  
+....................Q.2087.df...Q.2099.df [calculated in step II-2 above from Outflow.Only.future.csv - this is flow output from DHSVM]  
+....................WT.1994.df...WT.2005.df [calculated in step II-2 above from Tw_output.historical.csv - this is water temperature from RBM]  
+....................WT.2087.df...WT.2099.df [calculated in step II-2 above from Tw_output.future.csv - this is water temperature from RBM]  
+...............CanESM2/  
+...............CCSM4/  
+...............CNRM-CM5/  
+...............CSIRO-Mk3-6-0/  
+...............HadGEM2-CC365/  
+...............HadGEM2-ES365/  
+...............IPSL-CM5A-MR/  
+...............MIROC5/  
+...............NorESM1-M/  
+..........riparian1/  
+...............bcc-csm1-1-m/  
+....................Q.1994.df...Q.2005.df [calculated in step II-2 above from Outflow.Only.historical_s1.csv - this is flow output from DHSVM]  
+....................Q.2087.df...Q.2099.df [calculated in step II-2 above from Outflow.Only.future_s1.csv - this is flow output from DHSVM]  
+....................WT.1994.df...WT.2005.df [calculated in step II-2 above from Tw_output.historical_s1.csv - this is water temperature from RBM]  
+....................WT.2087.df...WT.2099.df [calculated in step II-2 above from Tw_output.future_s1.csv - this is water temperature from RBM]  
+...............CanESM2/  
+...............CCSM4/  
+...............CNRM-CM5/  
+...............CSIRO-Mk3-6-0/  
+...............HadGEM2-CC365/  
+...............HadGEM2-ES365/  
+...............IPSL-CM5A-MR/  
+...............MIROC5/  
+...............NorESM1-M/  
+..........riparian2/  
+...............bcc-csm1-1-m/  
+....................Q.1994.df...Q.2005.df [calculated in step II-2 above from Outflow.Only.historical_s2.csv - this is flow output from DHSVM]  
+....................Q.2087.df...Q.2099.df [calculated in step II-2 above from Outflow.Only.future_s2.csv - this is flow output from DHSVM]  
+....................WT.1994.df...WT.2005.df [calculated in step II-2 above from Tw_output.historical_s2.csv - this is water temperature from RBM]  
+....................WT.2087.df...WT.2099.df [calculated in step II-2 above from Tw_output.future_s2.csv - this is water temperature from RBM]  
+...............CanESM2/  
+...............CCSM4/  
+...............CNRM-CM5/  
+...............CSIRO-Mk3-6-0/  
+...............HadGEM2-CC365/  
+...............HadGEM2-ES365/  
+...............IPSL-CM5A-MR/  
+...............MIROC5/  
+...............NorESM1-M/  
+..........riparian3/  
+...............bcc-csm1-1-m/  
+....................Q.1994.df...Q.2005.df [calculated in step II-2 above from Outflow.Only.historical_s3.csv - this is flow output from DHSVM]  
+....................Q.2087.df...Q.2099.df [calculated in step II-2 above from Outflow.Only.future_s3.csv - this is flow output from DHSVM]  
+....................WT.1994.df...WT.2005.df [calculated in step II-2 above from Tw_output.historical_s3.csv - this is water temperature from RBM]  
+....................WT.2087.df...WT.2099.df [calculated in step II-2 above from Tw_output.future_s3.csv - this is water temperature from RBM]  
+...............CanESM2/  
+...............CCSM4/  
+...............CNRM-CM5/  
+...............CSIRO-Mk3-6-0/  
+...............HadGEM2-CC365/  
+...............HadGEM2-ES365/  
+...............IPSL-CM5A-MR/  
+...............MIROC5/  
+...............NorESM1-M/  
+..........*a variety of data summary files that get generated during creation of figures will also be stored here
+          
+data.out/ [created using scripts]  
+plots/ [created using scripts]  
+
+----------------------------------------------------------------------------------
