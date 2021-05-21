@@ -12,14 +12,14 @@ Follow these steps to download software, model input files, and libraries requir
 
 1) Download and install R and RStudio.
 
-2) Clone or download this repository (https://github.com/aimeefullerton/SnoIBM).
+2) Clone or download this [repository](https://github.com/aimeefullerton/SnoIBM).
 
 3) Create a project in RStudio.
 
 4) Install libraries in the setup section of code/ibm-model.R.
 
 5) Acquire the necessary DHSVM-RBM output data (flow and temperature for each scenario). 
-Data can be downloaded here: https://1drv.ms/u/s!Ah4aNY3Kukn4hfZW2ONv-qND_CfodA?e=poXFaG  
+Data can be downloaded [here](https://1drv.ms/u/s!Ah4aNY3Kukn4hfZW2ONv-qND_CfodA?e=poXFaG).  
 
 ----------------------------------------------------------------------------------
 
