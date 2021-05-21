@@ -37,3 +37,13 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Data files not stored on github
+_not_on_github
+
+# Project file
+SnoIBM.Rproj
+
+# Mac hidden file
+.DS_Store
+
