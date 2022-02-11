@@ -409,13 +409,13 @@ for(time.period  in c("historical", "future")){
 
 # IBM data:
 
-load("data.out/growth.historical.RData")
-load("data.out/growth.future.RData")
-load("data.out/growth.riparian1.future.RData")
+load("_not_on_github/data.out/growth.historical.RData")
+load("_not_on_github/data.out/growth.future.RData")
+load("_not_on_github/data.out/growth.riparian1.future.RData")
 
 for(riparian.scenario in c("riparian0", "riparian1", "riparian2", "riparian3")){
   for(time.period  in c("historical", "future")){
-    load(paste0("data.out/", riparian.scenario, ".", time.period , ".RData"))
+    load(paste0("_not_on_github/data.out/", riparian.scenario, ".", time.period , ".RData"))
     assign(paste0(riparian.scenario, ".", time.period ), thedata); rm(thedata)
   }
 }
@@ -462,19 +462,19 @@ for(riparian.scenario in riparian.scenario.list){
 # Figure 5 maps
 themetric <- "mean"
 for(time.period  in c("historical", "future")){
-  foo <- read.csv(paste0("data.in/rbm.data/T.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  foo <- read.csv(paste0("_not_on_github/data.in/rbm.data/T.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
   assign(paste0("T.seasons.", time.period ), foo); rm(foo)
-  foo <- read.csv(paste0("data.in/rbm.data/Q.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
+  foo <- read.csv(paste0("_not_on_github/data.in/rbm.data/Q.seasonal.", themetric, "s.", time.period , ".csv"), header = T, stringsAsFactors = F, row.names = 1)
   assign(paste0("Q.seasons.", time.period ), foo); rm(foo)
 }
 
 # Figure 6  & S2 time series
 for(riparian.scenario in riparian.scenario.list){
   for(time.period  in c("historical", "future")){
-    Qdat <- read.csv(paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".Q.csv"), header = T, stringsAsFactors = F)
+    Qdat <- read.csv(paste0("_not_on_github/data.in/rbm.data/", riparian.scenario, ".", time.period , ".Q.csv"), header = T, stringsAsFactors = F)
     Qdat$Date <- as.Date(Qdat$Date)
     assign(paste0(riparian.scenario, ".", time.period , ".Q"), Qdat)
-    Tdat <- read.csv(paste0("data.in/rbm.data/", riparian.scenario, ".", time.period , ".T.csv"), header = T, stringsAsFactors = F)
+    Tdat <- read.csv(paste0("_not_on_github/data.in/rbm.data/", riparian.scenario, ".", time.period , ".T.csv"), header = T, stringsAsFactors = F)
     Tdat$Date <- as.Date(Tdat$Date)
     assign(paste0(riparian.scenario, ".", time.period , ".T"), Tdat)
     rm(Qdat, Tdat)
@@ -735,6 +735,9 @@ themax <- aggregate(Qdat[,1:10], by = list(Qdat$Date), quantile, probs = 0.95); 
 themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Qdat.h$Date), rev(unique(Qdat.h$Date)))
 
+#summary statistics for paper
+median(themedian); min(themin); max(themax)
+
 plot(unique(Qdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-600, 1200), cex.axis = 0.9, las = 1)
 #axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
 mtext("\u0394 Flow \n(m \u2219", side = 2, line = 6, adj = 0, cex = 0.9)
@@ -756,6 +759,9 @@ themedian <- apply(themedian[,2:11], 1, themetric)
 themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); colnames(themax)[1] <- "Date"
 themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
+
+#summary statistics for paper
+median(themedian); min(themin); max(themax)
 
 plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 16), cex.axis = 0.9)
 #axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
@@ -920,6 +926,9 @@ themax <- aggregate(Tdat[,1:10], by = list(Tdat$Date), quantile, probs = 0.95); 
 themax <- apply(themax[,2:11], 1, themetric)
 xvals <- c(unique(Tdat.h$Date), rev(unique(Tdat.h$Date)))
 
+#summary statistics for paper
+median(themedian); min(themin); max(themax)
+
 plot(unique(Tdat.h$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-5, 17), xaxt = 'n', cex.axis = 1.5)
 axis(1, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), labels = F)
 mtext("\u0394 Water\ntemperature\n(\u00B0C)", side = 2, line = 7.5, adj = 0.5, cex = 0.9)
@@ -943,6 +952,9 @@ for(riparian.scenario in riparian.scenario.list[c(2,4,3)]){
   themax <- apply(themax[,2:11], 1, mean)
   xvals <- c(unique(Tdat.0$Date), rev(unique(Tdat.0$Date)))
   
+  #summary statistics for paper
+  median(themedian); min(themin); max(themax)
+  
   if(riparian.scenario == riparian.scenario.list[3]){
     plot(unique(Tdat.0$Date), themedian, type = 'n', ylab = "", xlab = "", ylim = c(-1.25, 1.25), xaxt = 'n', cex.axis = 1.5)
     axis(1, cex.axis = 1.5, at = c(as.Date("1900-11-01"), as.Date("1901-01-01"), as.Date("1901-03-01"), as.Date("1901-05-01"), as.Date("1901-07-01"), as.Date("1901-09-01")), 
@@ -959,7 +971,7 @@ for(riparian.scenario in riparian.scenario.list[c(2,4,3)]){
   polygon(xvals, c(themin, rev(themax)), border = NA, col = colors2use[1])
   lines(unique(Tdat.0$Date), themedian, col = colors2use[2], lwd = 1.5)
   abline(h = 0, lty = 2)
-  lg <- c("(b) Full restoration effect, Future climate", "(d) Least protective effect, Future climate", "(c) Partial restoration effect, Future climate")[as.numeric(substr(riparian.scenario, 9, 9))]
+  lg <- c("(b) Full restoration effect, Future climate", "(d) Minimum protection effect, Future climate", "(c) Partial restoration effect, Future climate")[as.numeric(substr(riparian.scenario, 9, 9))]
   legend("topleft", legend = lg, bty = 'n', cex = 1.4)
   
 }
@@ -1197,7 +1209,7 @@ row4 <- (container[container$Period == "Future" & container$Riparian == "LeastPr
 balloon.data <- rbind(row1, row2, row3, row4)
 balloon.data$DateEmerge <- as.numeric(balloon.data$DateEmerge); balloon.data$DateOutmigrate <- as.numeric(balloon.data$DateOutmigrate)
 balloon.data
-row.names(balloon.data) <- c("Climate effect, Baseline riparian", "Full restoration effect, Future climate", "Partial restoration effect, Future climate", "Least protective effect, Future climate")
+row.names(balloon.data) <- c("Climate effect, Baseline riparian", "Full restoration effect, Future climate", "Partial restoration effect, Future climate", "Minimum protection effect, Future climate")
 colnames(balloon.data) <- c("Subyearling survival", "Potential yearling survival", "Date emerged", "Date outmigrated", "Subyearling mass", "Potential yearling mass")
 
 mycolrs <- sign(balloon.data)
